@@ -99,9 +99,18 @@ export default {
       }),
     );
   },
-  async listMovements({ item_id, limit = 200 } = {}) {
+  async renameLocation(id, name) {
+    const { error } = await sb.from('locations').update({ name: name.trim() }).eq('id', id);
+    if (error) throw new Error(error.code === '23505' ? 'A location with this name already exists' : error.message);
+  },
+  async deleteLocation(id) {
+    ok(await sb.from('locations').delete().eq('id', id));
+  },
+
+  async listMovements({ item_id, types, limit = 200 } = {}) {
     let q = sb.from('movements').select(MOVE_SEL).order('created_at', { ascending: false }).limit(limit);
     if (item_id) q = q.eq('item_id', item_id);
+    if (types) q = q.in('type', types);
     return ok(await q).map(flatMove);
   },
 

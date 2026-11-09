@@ -1,7 +1,7 @@
 // Dashboard, item list, item detail (with stock in/out) and the item form.
 import { html, useState, useMemo } from './lib.js';
 import { db } from './data.js';
-import { KINDS, UNITS, fmtNum, fmtMoney, isLow, go, toast, useLoad } from './ui.js';
+import { KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, useLoad } from './ui.js';
 import { MovementList } from './views-other.js';
 
 const Loading = () => html`<p class="state">Loading…</p>`;
@@ -17,21 +17,50 @@ function ItemRow({ item }) {
       </div>
       <div class="qty">
         ${fmtNum(item.quantity)} <small>${item.unit}</small>
-        ${item.min_quantity > 0 && html`<span class="min">min ${fmtNum(item.min_quantity)}</span>`}
+        ${item.kind === 'tool'
+          ? html`<span class="min">available</span>`
+          : item.min_quantity > 0 && html`<span class="min">min ${fmtNum(item.min_quantity)}</span>`}
       </div>
     </a>
   `;
 }
 
+function LoanList({ loans, showItem = false }) {
+  if (!loans.length) return html`<p class="empty">No tools are out on loan.</p>`;
+  return html`
+    <div class="list">
+      ${loans.map(
+        (l) => html`
+          <div class="row">
+            <div class="main">
+              <div class="title">
+                ${showItem ? html`<a href=${'#/items/' + l.item_id}>${l.item_name}</a>` : l.user_name}
+              </div>
+              <div class="sub">
+                ${[showItem ? l.user_name : null, l.reason, 'since ' + fmtDate(l.since)].filter(Boolean).join(' · ')}
+              </div>
+            </div>
+            <div class="qty">${fmtNum(l.quantity)} <small>${l.unit}</small></div>
+          </div>
+        `,
+      )}
+    </div>
+  `;
+}
+
 export function Dashboard({ me }) {
   const { data, error, loading } = useLoad(async () => {
-    const [items, moves] = await Promise.all([db.listItems(), db.listMovements({ limit: 200 })]);
-    return { items, moves };
+    const [items, moves, loanMoves] = await Promise.all([
+      db.listItems(),
+      db.listMovements({ limit: 200 }),
+      db.listMovements({ types: ['checkout', 'return'], limit: 1000 }),
+    ]);
+    return { items, moves, loans: openLoans(loanMoves) };
   });
   if (loading) return html`<${Loading} />`;
   if (error) return html`<${Failed} error=${error} />`;
 
-  const { items, moves } = data;
+  const { items, moves, loans } = data;
   const low = items.filter(isLow);
   const value = items.reduce((sum, i) => sum + i.quantity * i.unit_cost, 0);
   const weekAgo = Date.now() - 7 * 86400000;
@@ -61,14 +90,26 @@ export function Dashboard({ me }) {
     </div>
 
     <div class="section">
+      <h2>Tools on loan</h2>
+      <div class="card"><${LoanList} loans=${loans} showItem=${true} /></div>
+    </div>
+
+    <div class="section">
       <h2>Recent activity</h2>
       <div class="card"><${MovementList} moves=${moves.slice(0, 8)} showItem=${true} /></div>
     </div>
   `;
 }
 
-export function Items({ me }) {
-  const { data: items, error, loading } = useLoad(() => db.listItems());
+export function Items({ me, locationId }) {
+  const { data, error, loading } = useLoad(async () => {
+    const [all, locations] = await Promise.all([db.listItems(), locationId ? db.listLocations() : []]);
+    return {
+      items: locationId ? all.filter((i) => i.location_id === locationId) : all,
+      place: locations.find((l) => l.id === locationId),
+    };
+  }, [locationId]);
+  const items = data?.items;
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
   const [lowOnly, setLowOnly] = useState(false);
@@ -91,9 +132,14 @@ export function Items({ me }) {
     html`<button class=${'chip' + (kind === value ? ' on' : '')} onClick=${() => setKind(value)}>${label}</button>`;
 
   return html`
+    ${locationId && html`<a class="back" href="#/locations">← Locations</a>`}
     <div class="page-head">
-      <h1>Items</h1>
-      ${me.canEdit && html`<a class="btn primary" href="#/items/new">Add item</a>`}
+      <h1>${locationId ? data.place?.name ?? 'Unknown location' : 'Items'}</h1>
+      <div class="actions">
+        ${!locationId && html`<a class="btn" href="#/locations">Locations</a>`}
+        <a class="btn" href=${locationId ? '#/labels/locations' : '#/labels'}>QR labels</a>
+        ${me.canEdit && html`<a class="btn primary" href="#/items/new">Add item</a>`}
+      </div>
     </div>
     <div class="filters">
       <input type="search" placeholder="Search name, category, location, specs" value=${q} onInput=${(e) => setQ(e.target.value)} />
@@ -115,17 +161,24 @@ const MOVE_FORMS = {
   in: { title: 'Add stock', field: 'Quantity to add', button: 'Add stock', placeholder: 'e.g. delivery, purchase' },
   out: { title: 'Take stock', field: 'Quantity to take', button: 'Take stock', placeholder: 'e.g. project or job name' },
   adjust: { title: 'Recount', field: 'Counted quantity now', button: 'Save count', placeholder: 'e.g. stock take' },
+  checkout: { title: 'Borrow tool', field: 'Quantity to borrow', button: 'Borrow', placeholder: 'e.g. which job, or who it is for' },
+  return: { title: 'Return tool', field: 'Quantity returned', button: 'Return', placeholder: 'e.g. condition on return' },
 };
 
-function MovementDialog({ item, type, onClose, onDone }) {
+function MovementDialog({ item, type, onLoan = 0, onClose, onDone }) {
   const cfg = MOVE_FORMS[type];
-  const [quantity, setQuantity] = useState('');
+  const loanType = type === 'checkout' || type === 'return';
+  const [quantity, setQuantity] = useState(loanType ? '1' : '');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   async function submit(e) {
     e.preventDefault();
+    if (type === 'return' && Number(quantity) > onLoan) {
+      setError(`Only ${fmtNum(onLoan)} ${item.unit} out on loan`);
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -143,7 +196,11 @@ function MovementDialog({ item, type, onClose, onDone }) {
       <form class="modal form" onSubmit=${submit}>
         <div>
           <h2>${cfg.title}</h2>
-          <p class="muted small">${item.name}: ${fmtNum(item.quantity)} ${item.unit} in stock</p>
+          <p class="muted small">
+            ${item.name}: ${fmtNum(item.quantity)} ${item.unit} ${loanType ? 'available' : 'in stock'}${loanType
+              ? `, ${fmtNum(onLoan)} on loan`
+              : ''}
+          </p>
         </div>
         ${error && html`<p class="error">${error}</p>`}
         <label>
@@ -187,13 +244,17 @@ export function ItemDetail({ me, id }) {
     }
   }
 
+  const isTool = item.kind === 'tool';
+  const loans = isTool ? openLoans(moves) : [];
+  const onLoan = loans.reduce((sum, l) => sum + l.quantity, 0);
+
   const facts = [
     ['Type', KINDS[item.kind]?.label],
     ['Category', item.category],
     ['Location', item.location_name],
     ...(KINDS[item.kind]?.fields ?? []).map(([key, label]) => [label, item.specs?.[key]]),
     ['Unit cost', item.unit_cost > 0 ? fmtMoney(item.unit_cost) + ' per ' + item.unit : ''],
-    ['Value in stock', item.unit_cost > 0 ? fmtMoney(item.unit_cost * item.quantity) : ''],
+    [isTool ? 'Value owned' : 'Value in stock', item.unit_cost > 0 ? fmtMoney(item.unit_cost * (item.quantity + onLoan)) : ''],
     ['Notes', item.notes],
   ].filter(([, v]) => v);
 
@@ -201,31 +262,46 @@ export function ItemDetail({ me, id }) {
     <a class="back" href="#/items">← Items</a>
     <div class="page-head">
       <h1>${item.name}</h1>
-      ${me.canEdit &&
-      html`<div class="actions">
-        <a class="btn" href=${'#/items/' + item.id + '/edit'}>Edit</a>
+      <div class="actions">
+        <a class="btn" href=${'#/labels/item/' + item.id}>QR label</a>
+        ${me.canEdit && html`<a class="btn" href=${'#/items/' + item.id + '/edit'}>Edit</a>`}
         ${me.isAdmin && html`<button class="btn danger" onClick=${archive}>Remove</button>`}
-      </div>`}
+      </div>
     </div>
 
     <div class="card pad">
       <div class="stock">
         <div>
-          <div class="muted small">In stock</div>
+          <div class="muted small">${isTool ? 'Available' : 'In stock'}</div>
           <div class="big">${fmtNum(item.quantity)} <small>${item.unit}</small></div>
         </div>
         <div class="muted small">
-          ${isLow(item) && html`<span class="badge low">Low</span>${' '}`}
-          ${item.min_quantity > 0 ? `Minimum ${fmtNum(item.min_quantity)} ${item.unit}` : 'No minimum set'}
+          ${isTool
+            ? `${fmtNum(onLoan)} on loan, ${fmtNum(item.quantity + onLoan)} owned`
+            : html`${isLow(item) && html`<span class="badge low">Low</span>${' '}`}
+                ${item.min_quantity > 0 ? `Minimum ${fmtNum(item.min_quantity)} ${item.unit}` : 'No minimum set'}`}
         </div>
       </div>
       ${me.canEdit &&
-      html`<div class="stock-actions">
-        <button class="btn primary big" onClick=${() => setDialog('out')}>Take stock</button>
-        <button class="btn big" onClick=${() => setDialog('in')}>Add stock</button>
-        <button class="btn big" onClick=${() => setDialog('adjust')}>Recount</button>
-      </div>`}
+      (isTool
+        ? html`<div class="stock-actions">
+            <button class="btn primary big" onClick=${() => setDialog('checkout')}>Borrow</button>
+            <button class="btn big" disabled=${onLoan <= 0} onClick=${() => setDialog('return')}>Return</button>
+            <button class="btn big" onClick=${() => setDialog('in')}>Add stock</button>
+            <button class="btn big" onClick=${() => setDialog('adjust')}>Recount</button>
+          </div>`
+        : html`<div class="stock-actions">
+            <button class="btn primary big" onClick=${() => setDialog('out')}>Take stock</button>
+            <button class="btn big" onClick=${() => setDialog('in')}>Add stock</button>
+            <button class="btn big" onClick=${() => setDialog('adjust')}>Recount</button>
+          </div>`)}
     </div>
+
+    ${isTool &&
+    html`<div class="section">
+      <h2>Out on loan</h2>
+      <div class="card"><${LoanList} loans=${loans} /></div>
+    </div>`}
 
     <div class="section">
       <h2>Details</h2>
@@ -240,7 +316,7 @@ export function ItemDetail({ me, id }) {
     </div>
 
     ${dialog &&
-    html`<${MovementDialog} item=${item} type=${dialog} onClose=${() => setDialog(null)}
+    html`<${MovementDialog} item=${item} type=${dialog} onLoan=${onLoan} onClose=${() => setDialog(null)}
       onDone=${() => { setDialog(null); reload(); }} />`}
   `;
 }
@@ -338,13 +414,14 @@ export function ItemForm({ me, id }) {
       <div class="grid2">
         ${!id &&
         html`<label>
-          <span>Quantity in stock now</span>
+          <span>${form.kind === 'tool' ? 'How many you own' : 'Quantity in stock now'}</span>
           <input type="number" inputmode="decimal" step="any" min="0" value=${initial} onInput=${(e) => setInitial(e.target.value)} />
         </label>`}
-        <label>
+        ${form.kind !== 'tool' &&
+        html`<label>
           <span>Minimum level (alert when at or below)</span>
           <input type="number" inputmode="decimal" step="any" min="0" value=${form.min_quantity} onInput=${set('min_quantity')} />
-        </label>
+        </label>`}
         <label>
           <span>Cost per unit</span>
           <input type="number" inputmode="decimal" step="any" min="0" value=${form.unit_cost} onInput=${set('unit_cost')} />

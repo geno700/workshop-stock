@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { toast } from './ui.js';
 import { Dashboard, Items, ItemDetail, ItemForm } from './views-items.js';
 import { History, Team } from './views-other.js';
+import { Locations, Labels } from './views-places.js';
 
 function useRoute() {
   const read = () => location.hash.slice(1) || '/';
@@ -129,12 +130,18 @@ function App() {
   else if (section === 'items' && parts[1] === 'new') view = html`<${ItemForm} me=${me} key="new" />`;
   else if (section === 'items' && parts[2] === 'edit') view = html`<${ItemForm} me=${me} id=${parts[1]} key=${parts[1]} />`;
   else if (section === 'items') view = html`<${ItemDetail} me=${me} id=${parts[1]} key=${parts[1]} />`;
+  else if (section === 'locations' && !parts[1]) view = html`<${Locations} me=${me} />`;
+  else if (section === 'locations') view = html`<${Items} me=${me} locationId=${parts[1]} key=${parts[1]} />`;
+  else if (section === 'labels' && parts[1] === 'item') view = html`<${Labels} preselect=${parts[2]} key=${parts[2]} />`;
+  else if (section === 'labels' && parts[1] === 'locations') view = html`<${Labels} startMode="locations" key="loc" />`;
+  else if (section === 'labels') view = html`<${Labels} key="items" />`;
   else if (section === 'history') view = html`<${History} />`;
   else if (section === 'team' && me.isAdmin) view = html`<${Team} me=${me} />`;
   else view = html`<p class="state">Page not found. <a href="#/"><u>Go to the dashboard</u></a></p>`;
 
+  const navSection = section === 'locations' || section === 'labels' ? 'items' : section;
   const link = (href, label, key) =>
-    html`<a href=${href} class=${section === key ? 'active' : ''}>${label}</a>`;
+    html`<a href=${href} class=${navSection === key ? 'active' : ''}>${label}</a>`;
 
   return html`
     ${demoMode &&

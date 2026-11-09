@@ -204,6 +204,32 @@ a.row:hover { background: var(--surface-2); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
 dl { margin: 0; }
 
+/* ---------- QR labels ---------- */
+
+.pick { max-height: 320px; overflow-y: auto; }
+.pick .row { cursor: pointer; }
+.pick input[type="checkbox"] { width: 20px; min-height: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+
+.labels { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--label-w), 1fr)); gap: 8px; }
+.labels.s { --label-w: 170px; --qr: 56px; --label-font: 0.72rem; }
+.labels.m { --label-w: 230px; --qr: 84px; --label-font: 0.84rem; }
+.labels.l { --label-w: 310px; --qr: 124px; --label-font: 1rem; }
+.label {
+  display: flex; align-items: center; gap: 8px; padding: 8px;
+  background: #fff; color: #000; border: 1px dashed #999; border-radius: 6px;
+  break-inside: avoid; font-size: var(--label-font); line-height: 1.25;
+}
+.label svg { width: var(--qr); height: var(--qr); flex: none; }
+.label-text { min-width: 0; }
+.label-name { font-weight: 700; overflow-wrap: anywhere; }
+.label-sub { color: #444; overflow-wrap: anywhere; }
+
+@media print {
+  .topbar, .banner, .no-print, #toasts { display: none !important; }
+  body { background: #fff; }
+  main { max-width: none; padding: 0; }
+}
+
 /* ---------- modal + toast ---------- */
 
 .overlay {

@@ -33,7 +33,38 @@ export function fmtDate(iso) {
   return sameDay ? `Today ${time}` : `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`;
 }
 
-export const isLow = (item) => Number(item.min_quantity) > 0 && Number(item.quantity) <= Number(item.min_quantity);
+// Tools are borrowed and returned, so a low count there is not a reorder signal.
+export const isLow = (item) =>
+  item.kind !== 'tool' && Number(item.min_quantity) > 0 && Number(item.quantity) <= Number(item.min_quantity);
+
+// Address used inside QR codes, so labels printed from this PC still point at the live app.
+export const appBase = () => config.appUrl || location.origin + location.pathname;
+
+// Works out which borrowed tools are still out, from 'checkout' and 'return' movements.
+// A return is matched to the same person's oldest loan first, then to anyone's oldest loan.
+export function openLoans(moves) {
+  const loans = [];
+  const sorted = [...moves].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  for (const m of sorted) {
+    if (m.type === 'checkout') {
+      loans.push({
+        item_id: m.item_id, item_name: m.item_name, unit: m.unit, user_id: m.user_id, user_name: m.user_name,
+        quantity: Number(m.quantity), since: m.created_at, reason: m.reason,
+      });
+    } else if (m.type === 'return') {
+      let left = Number(m.quantity);
+      const mine = loans.filter((l) => l.item_id === m.item_id && l.user_id === m.user_id);
+      const others = loans.filter((l) => l.item_id === m.item_id && l.user_id !== m.user_id);
+      for (const l of [...mine, ...others]) {
+        const used = Math.min(l.quantity, left);
+        l.quantity = Math.round((l.quantity - used) * 1e6) / 1e6;
+        left -= used;
+        if (left <= 0) break;
+      }
+    }
+  }
+  return loans.filter((l) => l.quantity > 0);
+}
 
 export const go = (path) => {
   location.hash = path;

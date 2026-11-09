@@ -4,6 +4,8 @@ export const config = {
   supabaseUrl: 'https://mgsegzzjmkcltliygekd.supabase.co',
   // Publishable key: safe to be public. Never put a secret key here.
   supabaseAnonKey: 'sb_publishable_BUrflv-6Vy3jElZcvLBpUw_DfE2_W93',
+  // Public address of the app. QR labels point here.
+  appUrl: 'https://geno700.github.io/workshop-stock/',
   workshopName: 'Workshop Stock',
   // Shown after money values, e.g. 'EGP', 'USD', '€'. Leave empty for plain numbers.
   currency: '',

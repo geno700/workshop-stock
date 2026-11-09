@@ -1,7 +1,7 @@
 // Demo data source: everything lives in this browser's localStorage.
 // Mirrors the API of data-supabase.js so the rest of the app doesn't care which is in use.
 
-const KEY = 'workshop-stock-demo-v1';
+const KEY = 'workshop-stock-demo-v2';
 const ME = 'demo-user';
 
 const uid = () =>
@@ -34,7 +34,7 @@ function seed() {
     delete item.location;
     s.items.push(item);
     const mv = (type, q, reason, who, d) => {
-      const delta = type === 'out' ? -q : q;
+      const delta = type === 'out' || type === 'checkout' ? -q : q;
       item.quantity += delta;
       s.movements.push({
         id: uid(), item_id: item.id, type, quantity: q, delta, balance_after: item.quantity,
@@ -75,7 +75,8 @@ function seed() {
     location: 'Chemical cabinet', specs: { spec: '15 kg spool' } }, 30,
     [['out', 6, 'Frame welding', ME, 11]]);
   add({ name: 'Digital caliper 150 mm', kind: 'tool', category: 'Measuring', unit: 'pcs', min_quantity: 1, unit_cost: 35,
-    location: 'Tool wall', specs: { serial: 'CAL-003', condition: 'Good' } }, 3);
+    location: 'Tool wall', specs: { serial: 'CAL-003', condition: 'Good' } }, 3,
+    [['checkout', 1, 'Shaft inspection', 'p2', 3]]);
   add({ name: 'Cordless drill 18 V', kind: 'tool', category: 'Power tools', unit: 'pcs', min_quantity: 1, unit_cost: 140,
     location: 'Tool wall', specs: { serial: 'DRL-01', condition: 'Good' } }, 2);
   return s;
@@ -192,9 +193,26 @@ export default {
     persist();
     return flatMove(row);
   },
-  async listMovements({ item_id, limit = 200 } = {}) {
+  async renameLocation(id, name) {
+    const n = name.trim();
+    if (state.locations.some((l) => l.id !== id && l.name.toLowerCase() === n.toLowerCase())) {
+      throw new Error('A location with this name already exists');
+    }
+    const l = state.locations.find((x) => x.id === id);
+    if (l) l.name = n;
+    persist();
+  },
+  async deleteLocation(id) {
+    state.locations = state.locations.filter((l) => l.id !== id);
+    state.items.forEach((i) => {
+      if (i.location_id === id) i.location_id = null;
+    });
+    persist();
+  },
+
+  async listMovements({ item_id, types, limit = 200 } = {}) {
     return state.movements
-      .filter((m) => !item_id || m.item_id === item_id)
+      .filter((m) => (!item_id || m.item_id === item_id) && (!types || types.includes(m.type)))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, limit)
       .map(flatMove);

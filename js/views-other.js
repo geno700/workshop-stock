@@ -55,7 +55,10 @@ export function History() {
     <div class="page-head"><h1>History</h1></div>
     <div class="filters">
       <input type="search" placeholder="Search item, reason or person" value=${q} onInput=${(e) => setQ(e.target.value)} />
-      <div class="chips">${chip('', 'All')} ${chip('in', 'Added')} ${chip('out', 'Taken')} ${chip('adjust', 'Recounts')}</div>
+      <div class="chips">
+        ${chip('', 'All')} ${chip('in', 'Added')} ${chip('out', 'Taken')} ${chip('adjust', 'Recounts')}
+        ${chip('checkout', 'Borrowed')} ${chip('return', 'Returned')}
+      </div>
     </div>
     <div class="card"><${MovementList} moves=${shown} showItem=${true} /></div>
     <p class="muted small" style="margin-top:10px">

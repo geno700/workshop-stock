@@ -14,8 +14,13 @@ A web app to stock and track workshop material (raw stock, components, consumabl
 - Dashboard: low-stock list, stock value, recent activity
 - Full movement history
 - Logins with roles: admin, member, viewer. New sign-ups wait for an admin to approve them.
+- Tools: borrow and return, with a list of who has what
+- Locations page: see what is stored where, rename or delete locations
+- QR labels for items and locations. Print them, stick them on, and scan with a phone camera to open that item.
 
-Planned next: QR labels and scanning, tool borrow/return, projects, suppliers, CSV import/export.
+Add `?demo` to the app's address to try it with sample data without touching the real stock.
+
+Planned next: projects, suppliers, CSV import/export.
 
 ## Try it on this PC
 
