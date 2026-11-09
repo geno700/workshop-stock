@@ -22,6 +22,9 @@ A web app to stock and track workshop material (raw stock, components, consumabl
 - Suppliers: contact details, linked to items
 - CSV: export items and history, import items from a spreadsheet (a template is on the Import page)
 
+- Voice or typed commands (microphone button): "take 5 M5 screws for conveyor build", "borrow the caliper",
+  "where is the drill". A preview shows what was understood; nothing is saved until you confirm.
+
 Add `?demo` to the app's address to try it with sample data without touching the real stock.
 
 ## Try it on this PC

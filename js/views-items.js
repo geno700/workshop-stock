@@ -360,7 +360,18 @@ const BLANK = {
   supplier_id: '', specs: {}, notes: '',
 };
 
+// A voice command can hand over a half-filled new item for review in the form.
+let itemDraft = null;
+export const setItemDraft = (d) => {
+  itemDraft = d;
+};
+
 export function ItemForm({ me, id }) {
+  const [draft] = useState(() => {
+    const d = id ? null : itemDraft;
+    itemDraft = null;
+    return d;
+  });
   const { data, error, loading } = useLoad(async () => {
     const [item, items, locations, suppliers] = await Promise.all([
       id ? db.getItem(id) : null,
@@ -370,8 +381,10 @@ export function ItemForm({ me, id }) {
     ]);
     return { item, locations, suppliers, categories: [...new Set(items.map((i) => i.category).filter(Boolean))].sort() };
   }, [id]);
-  const [f, setF] = useState(null);
-  const [initial, setInitial] = useState('');
+  const [f, setF] = useState(
+    draft ? { ...BLANK, name: draft.name, unit: draft.unit, location_name: draft.location_name } : null,
+  );
+  const [initial, setInitial] = useState(draft?.quantity ? String(draft.quantity) : '');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState('');
 

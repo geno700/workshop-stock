@@ -7,6 +7,7 @@ import { Dashboard, Items, ItemDetail, ItemForm } from './views-items.js';
 import { History, Team } from './views-other.js';
 import { Locations, Labels } from './views-places.js';
 import { Projects, ProjectDetail, Suppliers, ImportItems } from './views-manage.js';
+import { Voice } from './voice.js';
 
 function useRoute() {
   const read = () => location.hash.slice(1) || '/';
@@ -122,13 +123,13 @@ function App() {
   if (role === 'pending') return html`<${Pending} profile=${auth.profile} />`;
 
   const me = { ...auth.profile, canEdit: role === 'member' || role === 'admin', isAdmin: role === 'admin' };
-  const parts = route.split('/').filter(Boolean);
+  const parts = route.split('?')[0].split('/').filter(Boolean);
   const section = parts[0] ?? '';
 
   let view;
   if (!section) view = html`<${Dashboard} me=${me} />`;
   else if (section === 'items' && !parts[1]) view = html`<${Items} me=${me} />`;
-  else if (section === 'items' && parts[1] === 'new') view = html`<${ItemForm} me=${me} key="new" />`;
+  else if (section === 'items' && parts[1] === 'new') view = html`<${ItemForm} me=${me} key=${route} />`;
   else if (section === 'items' && parts[2] === 'edit') view = html`<${ItemForm} me=${me} id=${parts[1]} key=${parts[1]} />`;
   else if (section === 'items') view = html`<${ItemDetail} me=${me} id=${parts[1]} key=${parts[1]} />`;
   else if (section === 'locations' && !parts[1]) view = html`<${Locations} me=${me} />`;
@@ -167,6 +168,7 @@ function App() {
       </div>
     </header>
     <main>${view}</main>
+    <${Voice} me=${me} />
   `;
 }
 

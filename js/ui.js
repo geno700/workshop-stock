@@ -155,5 +155,11 @@ export function useLoad(fn, deps = []) {
       live = false;
     };
   }, [...deps, tick]);
+  // Refresh when stock is changed from somewhere else on the page (the voice box).
+  useEffect(() => {
+    const again = () => setTick((t) => t + 1);
+    addEventListener('stock-changed', again);
+    return () => removeEventListener('stock-changed', again);
+  }, []);
   return { ...state, reload: () => setTick((t) => t + 1) };
 }

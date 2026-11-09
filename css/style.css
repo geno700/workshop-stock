@@ -237,6 +237,36 @@ dl { margin: 0; }
   main { max-width: none; padding: 0; }
 }
 
+/* ---------- voice box ---------- */
+
+.fab {
+  position: fixed; right: 18px; bottom: 22px; z-index: 20;
+  width: 58px; height: 58px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--accent); color: var(--accent-text);
+  display: grid; place-items: center; box-shadow: 0 6px 18px rgb(0 0 0 / 0.28);
+}
+.fab:hover { filter: brightness(1.06); }
+.fab:focus-visible { outline: 3px solid var(--text); outline-offset: 2px; }
+@media (max-width: 700px) { .fab { bottom: calc(74px + env(safe-area-inset-bottom)); } }
+
+.modal.voice { max-width: 520px; max-height: 92vh; overflow-y: auto; display: grid; gap: 12px; }
+.voice-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.voice-head h2 { margin: 0; }
+.voice-input { display: flex; gap: 8px; }
+.voice-input input { flex: 1; min-width: 0; }
+.btn.mic { padding: 8px 10px; }
+.btn.mic.on { background: var(--danger); border-color: var(--danger); color: #fff; animation: pulse 1.2s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .btn.mic.on { animation: none; } }
+.example {
+  display: block; width: 100%; text-align: left; padding: 6px 0; border: 0; background: none;
+  color: var(--accent); font: inherit; font-size: 0.9rem; cursor: pointer;
+}
+.example:hover { text-decoration: underline; }
+.voice-stock { padding: 9px 12px; border-radius: 8px; background: var(--surface-2); font-size: 0.94rem; }
+.voice-stock.bad { background: var(--danger-soft); color: var(--danger); }
+@media print { .fab { display: none !important; } }
+
 /* ---------- modal + toast ---------- */
 
 .overlay {
