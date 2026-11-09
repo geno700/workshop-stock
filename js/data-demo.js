@@ -1,7 +1,7 @@
 // Demo data source: everything lives in this browser's localStorage.
 // Mirrors the API of data-supabase.js so the rest of the app doesn't care which is in use.
 
-const KEY = 'workshop-stock-demo-v2';
+const KEY = 'workshop-stock-demo-v3';
 const ME = 'demo-user';
 
 const uid = () =>
@@ -20,6 +20,20 @@ function seed() {
     locations: [],
     items: [],
     movements: [],
+    projects: [
+      { id: 'pr1', name: 'Conveyor build', status: 'active', notes: '', created_at: daysAgo(20) },
+      { id: 'pr2', name: 'Student kits', status: 'active', notes: '', created_at: daysAgo(10) },
+      { id: 'pr3', name: 'Machine enclosure', status: 'done', notes: '', created_at: daysAgo(30) },
+    ],
+    suppliers: [
+      { id: 'su1', name: 'Delta Metals', contact: 'Hany', phone: '+20 100 000 0001', email: 'sales@deltametals.example', notes: '', created_at: daysAgo(40) },
+      { id: 'su2', name: 'RoboParts', contact: 'Mona', phone: '+20 100 000 0002', email: 'orders@roboparts.example', notes: 'Ships in 3 days', created_at: daysAgo(40) },
+    ],
+  };
+  const SUPPLIER = { 'Sheet metal': 'su1', 'Bar stock': 'su1', Motors: 'su2', Controllers: 'su2', Bearings: 'su2' };
+  const PROJECT = {
+    'Enclosure panels': 'pr3', 'Machine guard': 'pr3', 'Shafts for conveyor': 'pr1', 'Frame assembly': 'pr1',
+    'Frame welding': 'pr1', 'Student kits': 'pr2', 'Sorting demo': 'pr2',
   };
   const loc = (name) => {
     let l = s.locations.find((x) => x.name === name);
@@ -29,7 +43,8 @@ function seed() {
   const add = (f, qty, moves = []) => {
     const item = {
       id: uid(), archived: false, notes: '', specs: {}, min_quantity: 0, unit_cost: 0, category: '',
-      ...f, location_id: loc(f.location), quantity: 0, created_at: daysAgo(35), updated_at: daysAgo(35),
+      ...f, location_id: loc(f.location), supplier_id: SUPPLIER[f.category] ?? null, quantity: 0,
+      created_at: daysAgo(35), updated_at: daysAgo(35),
     };
     delete item.location;
     s.items.push(item);
@@ -38,7 +53,7 @@ function seed() {
       item.quantity += delta;
       s.movements.push({
         id: uid(), item_id: item.id, type, quantity: q, delta, balance_after: item.quantity,
-        reason, user_id: who, created_at: daysAgo(d),
+        reason, project_id: type === 'out' ? PROJECT[reason] ?? null : null, user_id: who, created_at: daysAgo(d),
       });
     };
     mv('in', qty, 'Initial stock', ME, 35);
@@ -102,14 +117,20 @@ persist();
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
 const locName = (id) => state.locations.find((l) => l.id === id)?.name ?? '';
-const flatItem = (i) => ({ ...copy(i), location_name: locName(i.location_id) });
+const flatItem = (i) => {
+  const s = state.suppliers.find((x) => x.id === i.supplier_id);
+  return { ...copy(i), location_name: locName(i.location_id), supplier_name: s?.name ?? '', supplier_phone: s?.phone ?? '' };
+};
 const person = (id) => {
   const p = state.profiles.find((x) => x.id === id);
   return p ? p.full_name || p.email : 'Unknown';
 };
 const flatMove = (m) => {
   const item = state.items.find((i) => i.id === m.item_id);
-  return { ...m, item_name: item?.name ?? 'Deleted item', unit: item?.unit ?? '', user_name: person(m.user_id) };
+  return {
+    ...m, item_name: item?.name ?? 'Deleted item', unit: item?.unit ?? '', unit_cost: item?.unit_cost ?? 0,
+    user_name: person(m.user_id), project_name: state.projects.find((p) => p.id === m.project_id)?.name ?? '',
+  };
 };
 
 function ensureLocation(name) {
@@ -147,7 +168,7 @@ export default {
     const fields = {
       name: f.name, kind: f.kind, category: f.category, unit: f.unit, min_quantity: f.min_quantity,
       unit_cost: f.unit_cost, specs: f.specs, notes: f.notes, location_id: ensureLocation(f.location_name),
-      updated_at: new Date().toISOString(),
+      supplier_id: f.supplier_id || null, updated_at: new Date().toISOString(),
     };
     let item;
     if (f.id) {
@@ -170,7 +191,36 @@ export default {
     return copy(state.locations).sort((a, b) => a.name.localeCompare(b.name));
   },
 
-  async recordMovement({ item_id, type, quantity, reason }) {
+  async listProjects() {
+    return copy(state.projects).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  },
+  async saveProject(f) {
+    let p = state.projects.find((x) => x.id === f.id);
+    if (!p) state.projects.push((p = { id: uid(), status: 'active', notes: '', created_at: new Date().toISOString() }));
+    if (f.name !== undefined) p.name = f.name.trim();
+    if (f.status !== undefined) p.status = f.status;
+    persist();
+    return copy(p);
+  },
+  async listSuppliers() {
+    return copy(state.suppliers).sort((a, b) => a.name.localeCompare(b.name));
+  },
+  async saveSupplier(f) {
+    let s = state.suppliers.find((x) => x.id === f.id);
+    if (!s) state.suppliers.push((s = { id: uid(), created_at: new Date().toISOString() }));
+    Object.assign(s, { name: f.name, contact: f.contact, phone: f.phone, email: f.email, notes: f.notes });
+    persist();
+    return copy(s);
+  },
+  async deleteSupplier(id) {
+    state.suppliers = state.suppliers.filter((s) => s.id !== id);
+    state.items.forEach((i) => {
+      if (i.supplier_id === id) i.supplier_id = null;
+    });
+    persist();
+  },
+
+  async recordMovement({ item_id, type, quantity, reason, project_id }) {
     const item = state.items.find((x) => x.id === item_id);
     if (!item) throw new Error('Item not found');
     const q = Number(quantity);
@@ -187,7 +237,8 @@ export default {
     item.updated_at = new Date().toISOString();
     const row = {
       id: uid(), item_id, type, quantity: q, delta: Math.round(delta * 1e6) / 1e6, balance_after: balance,
-      reason: (reason ?? '').trim() || null, user_id: ME, created_at: new Date().toISOString(),
+      reason: (reason ?? '').trim() || null, project_id: project_id || null, user_id: ME,
+      created_at: new Date().toISOString(),
     };
     state.movements.push(row);
     persist();
@@ -210,9 +261,15 @@ export default {
     persist();
   },
 
-  async listMovements({ item_id, types, limit = 200 } = {}) {
+  async listMovements({ item_id, types, project_id, with_project, limit = 200 } = {}) {
     return state.movements
-      .filter((m) => (!item_id || m.item_id === item_id) && (!types || types.includes(m.type)))
+      .filter(
+        (m) =>
+          (!item_id || m.item_id === item_id) &&
+          (!types || types.includes(m.type)) &&
+          (!project_id || m.project_id === project_id) &&
+          (!with_project || m.project_id),
+      )
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(0, limit)
       .map(flatMove);

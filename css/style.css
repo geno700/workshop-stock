@@ -104,7 +104,7 @@ main { max-width: 1000px; margin: 0 auto; padding: 20px 16px 96px; }
     padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
     justify-content: space-around;
   }
-  .nav a { flex: 1; text-align: center; padding: 10px 4px; }
+  .nav a { flex: 1; text-align: center; padding: 10px 2px; font-size: 0.86rem; }
   .topbar { justify-content: space-between; }
   .user .who { display: none; }
 }
@@ -143,6 +143,13 @@ label > span { display: block; margin-bottom: 4px; font-size: 0.86rem; font-weig
 @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .error { padding: 9px 12px; border-radius: 8px; background: var(--danger-soft); color: var(--danger); font-size: 0.92rem; }
+
+.sublinks { display: flex; gap: 6px 18px; flex-wrap: wrap; margin: -6px 0 14px; font-size: 0.9rem; font-weight: 600; }
+.sublinks a, .sublinks button {
+  background: none; border: 0; padding: 4px 0; font: inherit; color: var(--accent); cursor: pointer;
+}
+.sublinks a:hover, .sublinks button:hover { text-decoration: underline; }
+input[type="file"] { padding: 7px; }
 
 .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .filters input[type="search"] { flex: 1 1 220px; }

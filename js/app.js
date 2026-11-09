@@ -6,6 +6,7 @@ import { toast } from './ui.js';
 import { Dashboard, Items, ItemDetail, ItemForm } from './views-items.js';
 import { History, Team } from './views-other.js';
 import { Locations, Labels } from './views-places.js';
+import { Projects, ProjectDetail, Suppliers, ImportItems } from './views-manage.js';
 
 function useRoute() {
   const read = () => location.hash.slice(1) || '/';
@@ -135,11 +136,15 @@ function App() {
   else if (section === 'labels' && parts[1] === 'item') view = html`<${Labels} preselect=${parts[2]} key=${parts[2]} />`;
   else if (section === 'labels' && parts[1] === 'locations') view = html`<${Labels} startMode="locations" key="loc" />`;
   else if (section === 'labels') view = html`<${Labels} key="items" />`;
+  else if (section === 'projects' && !parts[1]) view = html`<${Projects} me=${me} />`;
+  else if (section === 'projects') view = html`<${ProjectDetail} me=${me} id=${parts[1]} key=${parts[1]} />`;
+  else if (section === 'suppliers') view = html`<${Suppliers} me=${me} />`;
+  else if (section === 'import') view = html`<${ImportItems} me=${me} />`;
   else if (section === 'history') view = html`<${History} />`;
   else if (section === 'team' && me.isAdmin) view = html`<${Team} me=${me} />`;
   else view = html`<p class="state">Page not found. <a href="#/"><u>Go to the dashboard</u></a></p>`;
 
-  const navSection = section === 'locations' || section === 'labels' ? 'items' : section;
+  const navSection = ['locations', 'labels', 'suppliers', 'import'].includes(section) ? 'items' : section;
   const link = (href, label, key) =>
     html`<a href=${href} class=${navSection === key ? 'active' : ''}>${label}</a>`;
 
@@ -152,7 +157,8 @@ function App() {
     <header class="topbar">
       <${Brand} />
       <nav class="nav">
-        ${link('#/', 'Dashboard', '')} ${link('#/items', 'Items', 'items')} ${link('#/history', 'History', 'history')}
+        ${link('#/', 'Home', '')} ${link('#/items', 'Items', 'items')} ${link('#/projects', 'Projects', 'projects')}
+        ${link('#/history', 'History', 'history')}
         ${me.isAdmin && link('#/team', 'Team', 'team')}
       </nav>
       <div class="user">

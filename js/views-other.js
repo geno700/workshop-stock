@@ -1,7 +1,18 @@
 // Movement list (shared), full history page and team page.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, useLoad } from './ui.js';
+import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, useLoad, toCSV, download, today } from './ui.js';
+
+export function exportMoves(moves, name = 'stock-history') {
+  const rows = moves.map((m) => [
+    new Date(m.created_at).toLocaleString(), m.item_name, MOVE_LABELS[m.type] ?? m.type, m.delta, m.unit,
+    m.balance_after, m.reason ?? '', m.project_name ?? '', m.user_name,
+  ]);
+  download(
+    `${name}-${today()}.csv`,
+    toCSV(['date', 'item', 'type', 'change', 'unit', 'balance_after', 'reason', 'project', 'person'], rows),
+  );
+}
 
 const badgeClass = (type) => (type === 'in' || type === 'return' ? 'in' : type === 'adjust' ? 'adjust' : 'out');
 
@@ -18,7 +29,9 @@ export function MovementList({ moves, showItem = false }) {
                 ${' '}${showItem ? html`<a href=${'#/items/' + m.item_id}>${m.item_name}</a>` : m.reason || 'No reason given'}
               </div>
               <div class="sub">
-                ${[showItem ? m.reason : null, m.user_name, fmtDate(m.created_at)].filter(Boolean).join(' · ')}
+                ${[showItem ? m.reason : null, m.project_name && 'Project: ' + m.project_name, m.user_name, fmtDate(m.created_at)]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
             </div>
             <div>
@@ -52,7 +65,10 @@ export function History() {
     html`<button class=${'chip' + (type === value ? ' on' : '')} onClick=${() => setType(value)}>${label}</button>`;
 
   return html`
-    <div class="page-head"><h1>History</h1></div>
+    <div class="page-head">
+      <h1>History</h1>
+      <button class="btn" onClick=${() => exportMoves(shown)}>Export CSV</button>
+    </div>
     <div class="filters">
       <input type="search" placeholder="Search item, reason or person" value=${q} onInput=${(e) => setQ(e.target.value)} />
       <div class="chips">

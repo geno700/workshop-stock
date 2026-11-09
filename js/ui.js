@@ -79,6 +79,68 @@ export function toast(message, bad = false) {
   setTimeout(() => el.remove(), bad ? 5000 : 2500);
 }
 
+// Cost of the material in one movement, at the item's current unit cost.
+export const moveCost = (m) => Math.abs(Number(m.delta)) * Number(m.unit_cost ?? 0);
+
+// ---------- CSV ----------
+
+export function toCSV(headers, rows) {
+  const esc = (v) => {
+    let s = v == null ? '' : String(v);
+    // Stop spreadsheet apps from running text cells as formulas.
+    if (typeof v === 'string' && /^[=+\-@]/.test(s)) s = "'" + s;
+    return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  return '﻿' + [headers, ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
+}
+
+// Reads comma- or semicolon-separated text into rows of cells. Handles quoted cells.
+export function parseCSV(input) {
+  const text = input.replace(/^﻿/, '');
+  const first = text.split(/\r?\n/, 1)[0];
+  const delim = first.split(';').length > first.split(',').length ? ';' : ',';
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === delim) {
+      row.push(cell);
+      cell = '';
+    } else if (ch === '\n') {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = '';
+    } else if (ch !== '\r') cell += ch;
+  }
+  if (cell !== '' || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+}
+
+export function download(filename, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+export const today = () => new Date().toISOString().slice(0, 10);
+
 // Runs an async loader and tracks { data, error, loading }; reload() runs it again.
 export function useLoad(fn, deps = []) {
   const [state, setState] = useState({ loading: true });

@@ -9,13 +9,15 @@ const ok = ({ data, error }) => {
   return data;
 };
 
-const ITEM_SEL = '*, location:locations(name)';
-const MOVE_SEL = '*, item:items(name, unit), user:profiles(full_name, email)';
+const ITEM_SEL = '*, location:locations(name), supplier:suppliers(name, phone)';
+const MOVE_SEL = '*, item:items(name, unit, unit_cost), user:profiles(full_name, email), project:projects(name)';
 
 const flatItem = (r) =>
   r && {
     ...r,
     location_name: r.location?.name ?? '',
+    supplier_name: r.supplier?.name ?? '',
+    supplier_phone: r.supplier?.phone ?? '',
     quantity: Number(r.quantity),
     min_quantity: Number(r.min_quantity),
     unit_cost: Number(r.unit_cost),
@@ -29,6 +31,8 @@ const flatMove = (m) => ({
   balance_after: Number(m.balance_after),
   item_name: m.item?.name ?? 'Deleted item',
   unit: m.item?.unit ?? '',
+  unit_cost: Number(m.item?.unit_cost ?? 0),
+  project_name: m.project?.name ?? '',
   user_name: m.user?.full_name || m.user?.email || 'Unknown',
 });
 
@@ -81,6 +85,7 @@ export default {
     const fields = {
       name: f.name, kind: f.kind, category: f.category, unit: f.unit, min_quantity: f.min_quantity,
       unit_cost: f.unit_cost, specs: f.specs, notes: f.notes, location_id: await ensureLocation(f.location_name),
+      supplier_id: f.supplier_id || null,
     };
     const q = f.id ? sb.from('items').update(fields).eq('id', f.id) : sb.from('items').insert(fields);
     return flatItem(ok(await q.select(ITEM_SEL).single()));
@@ -92,10 +97,33 @@ export default {
     return ok(await sb.from('locations').select('id, name').order('name'));
   },
 
-  async recordMovement({ item_id, type, quantity, reason }) {
+  async listProjects() {
+    return ok(await sb.from('projects').select('*').order('created_at', { ascending: false }));
+  },
+  async saveProject(f) {
+    const fields = {};
+    if (f.name !== undefined) fields.name = f.name.trim();
+    if (f.status !== undefined) fields.status = f.status;
+    const q = f.id ? sb.from('projects').update(fields).eq('id', f.id) : sb.from('projects').insert(fields);
+    return ok(await q.select('*').single());
+  },
+  async listSuppliers() {
+    return ok(await sb.from('suppliers').select('*').order('name'));
+  },
+  async saveSupplier(f) {
+    const fields = { name: f.name, contact: f.contact, phone: f.phone, email: f.email, notes: f.notes };
+    const q = f.id ? sb.from('suppliers').update(fields).eq('id', f.id) : sb.from('suppliers').insert(fields);
+    return ok(await q.select('*').single());
+  },
+  async deleteSupplier(id) {
+    ok(await sb.from('suppliers').delete().eq('id', id));
+  },
+
+  async recordMovement({ item_id, type, quantity, reason, project_id }) {
     return ok(
       await sb.rpc('record_movement', {
         p_item: item_id, p_type: type, p_quantity: Number(quantity), p_reason: reason ?? null,
+        p_project: project_id || null,
       }),
     );
   },
@@ -107,10 +135,12 @@ export default {
     ok(await sb.from('locations').delete().eq('id', id));
   },
 
-  async listMovements({ item_id, types, limit = 200 } = {}) {
+  async listMovements({ item_id, types, project_id, with_project, limit = 200 } = {}) {
     let q = sb.from('movements').select(MOVE_SEL).order('created_at', { ascending: false }).limit(limit);
     if (item_id) q = q.eq('item_id', item_id);
     if (types) q = q.in('type', types);
+    if (project_id) q = q.eq('project_id', project_id);
+    if (with_project) q = q.not('project_id', 'is', null);
     return ok(await q).map(flatMove);
   },
 

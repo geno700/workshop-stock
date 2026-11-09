@@ -18,9 +18,11 @@ A web app to stock and track workshop material (raw stock, components, consumabl
 - Locations page: see what is stored where, rename or delete locations
 - QR labels for items and locations. Print them, stick them on, and scan with a phone camera to open that item.
 
-Add `?demo` to the app's address to try it with sample data without touching the real stock.
+- Projects: pick a project when taking stock, then see the material and cost per project
+- Suppliers: contact details, linked to items
+- CSV: export items and history, import items from a spreadsheet (a template is on the Import page)
 
-Planned next: projects, suppliers, CSV import/export.
+Add `?demo` to the app's address to try it with sample data without touching the real stock.
 
 ## Try it on this PC
 

@@ -1,7 +1,23 @@
 // Dashboard, item list, item detail (with stock in/out) and the item form.
 import { html, useState, useMemo } from './lib.js';
 import { db } from './data.js';
-import { KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, useLoad } from './ui.js';
+import {
+  KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, useLoad, toCSV, download, today,
+} from './ui.js';
+
+export const ITEM_CSV = [
+  'name', 'type', 'category', 'unit', 'quantity', 'min_quantity', 'unit_cost', 'location', 'supplier',
+  'grade', 'dimensions', 'part_no', 'spec', 'serial', 'condition', 'notes',
+];
+
+function exportItems(items) {
+  const rows = items.map((i) => [
+    i.name, i.kind, i.category ?? '', i.unit, i.quantity, i.min_quantity, i.unit_cost, i.location_name, i.supplier_name,
+    i.specs?.grade ?? '', i.specs?.dimensions ?? '', i.specs?.part_no ?? '', i.specs?.spec ?? '',
+    i.specs?.serial ?? '', i.specs?.condition ?? '', i.notes ?? '',
+  ]);
+  download(`stock-items-${today()}.csv`, toCSV(ITEM_CSV, rows));
+}
 import { MovementList } from './views-other.js';
 
 const Loading = () => html`<p class="state">Loading…</p>`;
@@ -135,11 +151,14 @@ export function Items({ me, locationId }) {
     ${locationId && html`<a class="back" href="#/locations">← Locations</a>`}
     <div class="page-head">
       <h1>${locationId ? data.place?.name ?? 'Unknown location' : 'Items'}</h1>
-      <div class="actions">
-        ${!locationId && html`<a class="btn" href="#/locations">Locations</a>`}
-        <a class="btn" href=${locationId ? '#/labels/locations' : '#/labels'}>QR labels</a>
-        ${me.canEdit && html`<a class="btn primary" href="#/items/new">Add item</a>`}
-      </div>
+      ${me.canEdit && html`<a class="btn primary" href="#/items/new">Add item</a>`}
+    </div>
+    <div class="sublinks">
+      ${!locationId && html`<a href="#/locations">Locations</a>`}
+      ${!locationId && html`<a href="#/suppliers">Suppliers</a>`}
+      <a href=${locationId ? '#/labels/locations' : '#/labels'}>QR labels</a>
+      ${!locationId && me.canEdit && html`<a href="#/import">Import CSV</a>`}
+      <button onClick=${() => exportItems(shown)}>Export CSV</button>
     </div>
     <div class="filters">
       <input type="search" placeholder="Search name, category, location, specs" value=${q} onInput=${(e) => setQ(e.target.value)} />
@@ -165,7 +184,8 @@ const MOVE_FORMS = {
   return: { title: 'Return tool', field: 'Quantity returned', button: 'Return', placeholder: 'e.g. condition on return' },
 };
 
-function MovementDialog({ item, type, onLoan = 0, onClose, onDone }) {
+function MovementDialog({ item, type, onLoan = 0, projects = [], onClose, onDone }) {
+  const [projectId, setProjectId] = useState('');
   const cfg = MOVE_FORMS[type];
   const loanType = type === 'checkout' || type === 'return';
   const [quantity, setQuantity] = useState(loanType ? '1' : '');
@@ -182,7 +202,7 @@ function MovementDialog({ item, type, onLoan = 0, onClose, onDone }) {
     setBusy(true);
     setError('');
     try {
-      await db.recordMovement({ item_id: item.id, type, quantity: Number(quantity), reason });
+      await db.recordMovement({ item_id: item.id, type, quantity: Number(quantity), reason, project_id: projectId || null });
       toast('Stock updated');
       onDone();
     } catch (err) {
@@ -208,6 +228,15 @@ function MovementDialog({ item, type, onLoan = 0, onClose, onDone }) {
           <input type="number" inputmode="decimal" step="any" min="0" required autofocus
             value=${quantity} onInput=${(e) => setQuantity(e.target.value)} />
         </label>
+        ${type === 'out' &&
+        projects.length > 0 &&
+        html`<label>
+          <span>Project (optional)</span>
+          <select value=${projectId} onChange=${(e) => setProjectId(e.target.value)}>
+            <option value="">No project</option>
+            ${projects.map((p) => html`<option value=${p.id}>${p.name}</option>`)}
+          </select>
+        </label>`}
         <label>
           <span>Reason (optional)</span>
           <input value=${reason} placeholder=${cfg.placeholder} onInput=${(e) => setReason(e.target.value)} />
@@ -223,14 +252,18 @@ function MovementDialog({ item, type, onLoan = 0, onClose, onDone }) {
 
 export function ItemDetail({ me, id }) {
   const { data, error, loading, reload } = useLoad(async () => {
-    const [item, moves] = await Promise.all([db.getItem(id), db.listMovements({ item_id: id, limit: 100 })]);
-    return { item, moves };
+    const [item, moves, projects] = await Promise.all([
+      db.getItem(id),
+      db.listMovements({ item_id: id, limit: 100 }),
+      db.listProjects(),
+    ]);
+    return { item, moves, projects: projects.filter((p) => p.status === 'active') };
   }, [id]);
   const [dialog, setDialog] = useState(null);
 
   if (loading) return html`<${Loading} />`;
   if (error) return html`<${Failed} error=${error} />`;
-  const { item, moves } = data;
+  const { item, moves, projects } = data;
   if (!item) return html`<p class="state">This item does not exist. <a href="#/items"><u>Back to items</u></a></p>`;
 
   async function archive() {
@@ -252,6 +285,7 @@ export function ItemDetail({ me, id }) {
     ['Type', KINDS[item.kind]?.label],
     ['Category', item.category],
     ['Location', item.location_name],
+    ['Supplier', [item.supplier_name, item.supplier_phone].filter(Boolean).join(' · ')],
     ...(KINDS[item.kind]?.fields ?? []).map(([key, label]) => [label, item.specs?.[key]]),
     ['Unit cost', item.unit_cost > 0 ? fmtMoney(item.unit_cost) + ' per ' + item.unit : ''],
     [isTool ? 'Value owned' : 'Value in stock', item.unit_cost > 0 ? fmtMoney(item.unit_cost * (item.quantity + onLoan)) : ''],
@@ -316,17 +350,25 @@ export function ItemDetail({ me, id }) {
     </div>
 
     ${dialog &&
-    html`<${MovementDialog} item=${item} type=${dialog} onLoan=${onLoan} onClose=${() => setDialog(null)}
+    html`<${MovementDialog} item=${item} type=${dialog} onLoan=${onLoan} projects=${projects} onClose=${() => setDialog(null)}
       onDone=${() => { setDialog(null); reload(); }} />`}
   `;
 }
 
-const BLANK = { name: '', kind: 'raw', category: '', unit: 'pcs', min_quantity: '', unit_cost: '', location_name: '', specs: {}, notes: '' };
+const BLANK = {
+  name: '', kind: 'raw', category: '', unit: 'pcs', min_quantity: '', unit_cost: '', location_name: '',
+  supplier_id: '', specs: {}, notes: '',
+};
 
 export function ItemForm({ me, id }) {
   const { data, error, loading } = useLoad(async () => {
-    const [item, items, locations] = await Promise.all([id ? db.getItem(id) : null, db.listItems(), db.listLocations()]);
-    return { item, locations, categories: [...new Set(items.map((i) => i.category).filter(Boolean))].sort() };
+    const [item, items, locations, suppliers] = await Promise.all([
+      id ? db.getItem(id) : null,
+      db.listItems(),
+      db.listLocations(),
+      db.listSuppliers(),
+    ]);
+    return { item, locations, suppliers, categories: [...new Set(items.map((i) => i.category).filter(Boolean))].sort() };
   }, [id]);
   const [f, setF] = useState(null);
   const [initial, setInitial] = useState('');
@@ -359,6 +401,7 @@ export function ItemForm({ me, id }) {
         min_quantity: Number(form.min_quantity) || 0,
         unit_cost: Number(form.unit_cost) || 0,
         location_name: form.location_name,
+        supplier_id: form.supplier_id || null,
         specs: keep,
         notes: (form.notes ?? '').trim(),
       });
@@ -427,6 +470,13 @@ export function ItemForm({ me, id }) {
           <input type="number" inputmode="decimal" step="any" min="0" value=${form.unit_cost} onInput=${set('unit_cost')} />
         </label>
       </div>
+      <label>
+        <span>Supplier</span>
+        <select value=${form.supplier_id ?? ''} onChange=${set('supplier_id')}>
+          <option value="">No supplier</option>
+          ${data.suppliers.map((s) => html`<option value=${s.id}>${s.name}</option>`)}
+        </select>
+      </label>
       <label><span>Notes</span><textarea value=${form.notes} onInput=${set('notes')}></textarea></label>
       <div class="actions">
         <button class="btn primary" disabled=${busy}>${id ? 'Save changes' : 'Add item'}</button>
