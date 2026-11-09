@@ -15,7 +15,9 @@ export function Projects({ me }) {
     const [projects, moves] = await Promise.all([db.listProjects(), db.listMovements({ with_project: true, limit: 2000 })]);
     const cost = {};
     moves.forEach((m) => {
-      if (m.type === 'out') cost[m.project_id] = (cost[m.project_id] ?? 0) + moveCost(m);
+      // An undone withdrawal comes back as an 'in' on the same project, so it cancels out.
+      const sign = m.type === 'out' ? 1 : m.type === 'in' ? -1 : 0;
+      cost[m.project_id] = (cost[m.project_id] ?? 0) + sign * moveCost(m);
     });
     return { projects, cost };
   });
@@ -87,13 +89,14 @@ export function ProjectDetail({ me, id }) {
 
   const used = {};
   moves
-    .filter((m) => m.type === 'out')
+    .filter((m) => m.type === 'out' || m.type === 'in')
     .forEach((m) => {
+      const sign = m.type === 'out' ? 1 : -1;
       const u = (used[m.item_id] ??= { id: m.item_id, name: m.item_name, unit: m.unit, quantity: 0, cost: 0 });
-      u.quantity += Number(m.quantity);
-      u.cost += moveCost(m);
+      u.quantity = Math.round((u.quantity + sign * Number(m.quantity)) * 1e6) / 1e6;
+      u.cost += sign * moveCost(m);
     });
-  const lines = Object.values(used).sort((a, b) => b.cost - a.cost);
+  const lines = Object.values(used).filter((l) => l.quantity > 0).sort((a, b) => b.cost - a.cost);
   const total = lines.reduce((sum, l) => sum + l.cost, 0);
 
   async function update(fields, message) {

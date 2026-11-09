@@ -16,7 +16,7 @@ export function exportMoves(moves, name = 'stock-history') {
 
 const badgeClass = (type) => (type === 'in' || type === 'return' ? 'in' : type === 'adjust' ? 'adjust' : 'out');
 
-export function MovementList({ moves, showItem = false }) {
+export function MovementList({ moves, showItem = false, undoId = null, onUndo }) {
   if (!moves.length) return html`<p class="empty">No stock movements yet.</p>`;
   return html`
     <div class="list">
@@ -32,6 +32,7 @@ export function MovementList({ moves, showItem = false }) {
                 ${[showItem ? m.reason : null, m.project_name && 'Project: ' + m.project_name, m.user_name, fmtDate(m.created_at)]
                   .filter(Boolean)
                   .join(' · ')}
+                ${m.id === undoId && html` · <button class="undo-link" onClick=${onUndo}>Undo</button>`}
               </div>
             </div>
             <div>

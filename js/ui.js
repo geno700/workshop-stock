@@ -70,13 +70,23 @@ export const go = (path) => {
   location.hash = path;
 };
 
-export function toast(message, bad = false) {
+// action: optional { label, run } shown as a button inside the toast.
+export function toast(message, bad = false, action = null) {
   const host = document.getElementById('toasts');
   const el = document.createElement('div');
   el.className = 'toast' + (bad ? ' bad' : '');
   el.textContent = message;
+  if (action) {
+    const button = document.createElement('button');
+    button.textContent = action.label;
+    button.onclick = () => {
+      el.remove();
+      action.run();
+    };
+    el.append(button);
+  }
   host.append(el);
-  setTimeout(() => el.remove(), bad ? 5000 : 2500);
+  setTimeout(() => el.remove(), action ? 10000 : bad ? 5000 : 2500);
 }
 
 // Cost of the material in one movement, at the item's current unit cost.

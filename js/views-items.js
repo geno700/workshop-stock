@@ -19,6 +19,7 @@ function exportItems(items) {
   download(`stock-items-${today()}.csv`, toCSV(ITEM_CSV, rows));
 }
 import { MovementList } from './views-other.js';
+import { savedToast, runUndo, isUndo } from './undo.js';
 
 const Loading = () => html`<p class="state">Loading…</p>`;
 const Failed = ({ error }) => html`<p class="state">Something went wrong: ${error.message}</p>`;
@@ -202,8 +203,8 @@ function MovementDialog({ item, type, onLoan = 0, projects = [], onClose, onDone
     setBusy(true);
     setError('');
     try {
-      await db.recordMovement({ item_id: item.id, type, quantity: Number(quantity), reason, project_id: projectId || null });
-      toast('Stock updated');
+      const saved = await db.recordMovement({ item_id: item.id, type, quantity: Number(quantity), reason, project_id: projectId || null });
+      savedToast('Stock updated', saved);
       onDone();
     } catch (err) {
       setError(err.message);
@@ -277,6 +278,14 @@ export function ItemDetail({ me, id }) {
     }
   }
 
+  // You can undo your own latest entry on this item, unless it is already an undo.
+  const latest = moves[0];
+  const undoId =
+    me.canEdit && latest && latest.user_id === me.id && !isUndo(latest) && Number(latest.delta) !== 0 ? latest.id : null;
+  const undoLatest = () => {
+    if (confirm('Undo this entry? An opposite entry will be added to the history.')) runUndo(latest);
+  };
+
   const isTool = item.kind === 'tool';
   const loans = isTool ? openLoans(moves) : [];
   const onLoan = loans.reduce((sum, l) => sum + l.quantity, 0);
@@ -346,7 +355,7 @@ export function ItemDetail({ me, id }) {
 
     <div class="section">
       <h2>History</h2>
-      <div class="card"><${MovementList} moves=${moves} /></div>
+      <div class="card"><${MovementList} moves=${moves} undoId=${undoId} onUndo=${undoLatest} /></div>
     </div>
 
     ${dialog &&

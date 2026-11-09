@@ -4,6 +4,7 @@ import { db } from './data.js';
 import { KINDS, fmtNum, go, toast } from './ui.js';
 import { parseCommand } from './voice-parse.js';
 import { setItemDraft } from './views-items.js';
+import { savedToast } from './undo.js';
 
 const SpeechRecognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 
@@ -120,11 +121,11 @@ function VoiceSheet({ me, onClose }) {
     setBusy(true);
     setError('');
     try {
-      await db.recordMovement({
+      const saved = await db.recordMovement({
         item_id: item.id, type: draft.type, quantity: qty, reason: draft.reason,
         project_id: draft.type === 'out' ? draft.projectId || null : null,
       });
-      toast(`${DONE[draft.type]} ${fmtNum(qty)} ${item.unit}: ${item.name}`);
+      savedToast(`${DONE[draft.type]} ${fmtNum(qty)} ${item.unit}: ${item.name}`, saved);
       dispatchEvent(new Event('stock-changed'));
       onClose();
     } catch (err) {
