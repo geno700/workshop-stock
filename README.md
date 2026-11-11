@@ -1,6 +1,7 @@
 # Workshop Stock
 
-A web app to stock and track workshop material (raw stock, components, consumables, tools) and share it with a team.
+A free, open-source web app to stock and track workshop material (raw stock, components, consumables, tools) and share it with a team.
+Anyone can start a workshop, name it, and invite their team with a link or a join code. One account can belong to several workshops.
 
 - Plain HTML and JavaScript. No build step and nothing to install.
 - Hosted free on GitHub Pages. Data and logins live in Supabase (free tier).
@@ -13,7 +14,9 @@ A web app to stock and track workshop material (raw stock, components, consumabl
 - Take stock, add stock and recount, each recorded with who, when and why
 - Dashboard: low-stock list, stock value, recent activity
 - Full movement history
-- Logins with roles: admin, member, viewer. New sign-ups wait for an admin to approve them.
+- Many workshops in one database, each with its own stock, history and team
+- Logins with roles per workshop: admin, member, viewer. People who join wait for that workshop's admin to approve them.
+- Password reset by email
 - Tools: borrow and return, with a list of who has what
 - Locations page: see what is stored where, rename or delete locations
 - QR labels for items and locations. Print them, stick them on, and scan with a phone camera to open that item.
@@ -65,12 +68,13 @@ Then open http://localhost:5173
 ### 3. Connect the two
 
 In Supabase open **Authentication > URL Configuration** and set **Site URL** to your GitHub Pages address.
-This makes the email confirmation link bring people back to the app.
+This makes the email confirmation and password-reset links bring people back to the app.
 
-### 4. Create your account
+### 4. Create your account and workshop
 
-Open the app and create an account. **The first account becomes the admin.**
-Everyone who signs up after that appears on the **Team** page as waiting, and you choose their role:
+Open the app, create an account, and start a workshop. **Whoever creates a workshop is its admin.**
+On the **Team** page, copy the invite link or the join code and send it to your team. Each person who uses it
+appears there as waiting, and you choose their role:
 
 | Role | Can do |
 |---|---|
@@ -81,5 +85,12 @@ Everyone who signs up after that appears on the **Team** page as waiting, and yo
 ## Notes
 
 - Supabase's free tier pauses a project after about a week with no activity. Resume it from the Supabase dashboard.
-- Set `workshopName` and `currency` in `config.js` to change the title and how money is shown.
+- Set `workshopName` and `currency` in `config.js` to change the app's title on the sign-in page and how money is shown.
+- Password-reset emails need email sending set up in Supabase (**Authentication > Emails > SMTP settings**). The built-in sender only delivers to the project's own team.
+- Upgrading a version 1 database: run `supabase/schema.sql` again. The existing stock moves into a workshop called "My workshop".
+- Whoever runs the Supabase project can read every workshop's data in it. If that matters to you, run your own copy.
+
+## Licence
+
+MIT. See `LICENSE`.
 - To update the live app, upload the changed files to the GitHub repository again.
