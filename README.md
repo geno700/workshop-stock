@@ -27,6 +27,8 @@ Anyone can start a workshop, name it, and invite their team with a link or a joi
 
 - Voice or typed commands (microphone button): "take 5 M5 screws for conveyor build", "borrow the caliper",
   "where is the drill". A preview shows what was understood; nothing is saved until you confirm.
+  Two voice engines: the browser's built-in one (fast, speech goes to the browser's online service) and a private one
+  that runs on the device (English, downloads a speech model of about 40 MB on first use).
 
 Add `?demo` to the app's address to try it with sample data without touching the real stock.
 
