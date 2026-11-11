@@ -310,3 +310,6 @@ dl { margin: 0; }
 .modal.ask p { white-space: pre-line; }
 .btn.primary.danger-fill { background: var(--danger); border-color: var(--danger); }
 .engine { display: grid; gap: 6px; }
+.length-pick { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 0.86rem; color: var(--muted); }
+.length-pick select { width: auto; padding: 4px 8px; }
+.stock .length-pick { margin: 8px 0 0; }
