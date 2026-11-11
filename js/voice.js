@@ -5,6 +5,21 @@ import { KINDS, fmtNum, go, toast } from './ui.js';
 import { parseCommand } from './voice-parse.js';
 import { setItemDraft } from './views-items.js';
 import { savedToast } from './undo.js';
+import { privateSupported, modelDownloaded, startRecording, transcribe } from './voice-private.js';
+
+// Which speech engine to use: the browser's own (online) one, or the private on-device one.
+const ENGINE_KEY = 'workshop-stock-voice-engine';
+function savedEngine() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(ENGINE_KEY);
+  } catch {
+    // Storage blocked: fall back to the default below.
+  }
+  if (saved === 'private' && privateSupported) return 'private';
+  if (saved === 'builtin' && SpeechRecognition) return 'builtin';
+  return SpeechRecognition ? 'builtin' : privateSupported ? 'private' : 'builtin';
+}
 
 const SpeechRecognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
 
@@ -46,7 +61,11 @@ function VoiceSheet({ me, onClose }) {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [engine, setEngine] = useState(savedEngine);
+  const [status, setStatus] = useState('');
   const rec = useRef(null);
+  const tape = useRef(null);
+  const finish = useRef(null);
   const input = useRef(null);
 
   useEffect(() => {
@@ -55,7 +74,10 @@ function VoiceSheet({ me, onClose }) {
       (err) => setError(err.message),
     );
     input.current?.focus();
-    return () => rec.current?.abort();
+    return () => {
+      rec.current?.abort();
+      tape.current?.cancel();
+    };
   }, []);
 
   function understand(sentence) {
@@ -72,7 +94,59 @@ function VoiceSheet({ me, onClose }) {
     } else setDraft(r);
   }
 
+  function chooseEngine(next) {
+    if (listening || status) return;
+    setEngine(next);
+    setMicError('');
+    try {
+      localStorage.setItem(ENGINE_KEY, next);
+    } catch {
+      // Storage blocked: the choice lasts for this visit only.
+    }
+  }
+
+  // Private mode: record, then turn the recording into text on this device.
+  async function togglePrivateMic() {
+    if (status) return;
+    if (!listening) {
+      setMicError('');
+      setDraft(null);
+      try {
+        tape.current = await startRecording(() => finish.current?.());
+        setListening(true);
+      } catch (err) {
+        setMicError(
+          err.name === 'NotAllowedError'
+            ? 'Microphone access was blocked. Allow it in the browser, or type instead.'
+            : err.name === 'NotFoundError' ? 'No microphone was found.' : 'Recording could not start: ' + err.message,
+        );
+      }
+      return;
+    }
+    await finishPrivate();
+  }
+  async function finishPrivate() {
+    const recording = tape.current;
+    tape.current = null;
+    if (!recording) return;
+    setListening(false);
+    setStatus('Working out what you said…');
+    try {
+      const audio = await recording.stop();
+      const heard = await transcribe(audio, (percent) => setStatus(`Downloading the speech model: ${percent}%`));
+      if (heard) {
+        setText(heard);
+        understand(heard);
+      } else setMicError('I did not hear anything. Tap the microphone and try again.');
+    } catch (err) {
+      setMicError('Private voice input failed: ' + err.message);
+    }
+    setStatus('');
+  }
+  finish.current = finishPrivate;
+
   function toggleMic() {
+    if (engine === 'private') return togglePrivateMic();
     if (listening) return rec.current?.stop();
     setMicError('');
     const r = new SpeechRecognition();
@@ -108,6 +182,7 @@ function VoiceSheet({ me, onClose }) {
     }
   }
 
+  const canSpeak = engine === 'private' ? privateSupported : Boolean(SpeechRecognition);
   const items = ctx?.items ?? [];
   const item = draft?.intent === 'move' ? items.find((i) => i.id === draft.itemId) : null;
   const qty = Number(draft?.qty);
@@ -147,14 +222,34 @@ function VoiceSheet({ me, onClose }) {
         </div>
 
         <form class="voice-input" onSubmit=${(e) => { e.preventDefault(); understand(text); }}>
-          <input ref=${input} value=${text} placeholder=${listening ? 'Listening…' : 'e.g. take 5 M5 screws'}
+          <input ref=${input} value=${text} placeholder=${listening ? (engine === 'private' ? 'Recording… tap the microphone when done' : 'Listening…') : 'e.g. take 5 M5 screws'}
             onInput=${(e) => setText(e.target.value)} aria-label="Command" />
-          ${SpeechRecognition &&
-          html`<button type="button" class=${'btn mic' + (listening ? ' on' : '')} onClick=${toggleMic}
+          ${canSpeak &&
+          html`<button type="button" class=${'btn mic' + (listening ? ' on' : '')} onClick=${toggleMic} disabled=${!!status}
             aria-label=${listening ? 'Stop listening' : 'Start listening'}><${MicIcon} /></button>`}
           <button class="btn primary" disabled=${!ctx || !text.trim()}>Go</button>
         </form>
-        ${!SpeechRecognition && html`<p class="muted small">This browser has no built-in voice input, so type your command.</p>`}
+        ${(SpeechRecognition || privateSupported) &&
+        html`<div class="engine">
+          <div class="chips">
+            ${SpeechRecognition &&
+            html`<button type="button" class=${'chip' + (engine === 'builtin' ? ' on' : '')} onClick=${() => chooseEngine('builtin')}>
+              Built-in voice
+            </button>`}
+            ${privateSupported &&
+            html`<button type="button" class=${'chip' + (engine === 'private' ? ' on' : '')} onClick=${() => chooseEngine('private')}>
+              Private voice
+            </button>`}
+          </div>
+          <p class="muted small">
+            ${engine === 'private'
+              ? 'Your speech stays on this device. Tap the microphone, speak, then tap it again.' +
+                (modelDownloaded() ? '' : ' The first use downloads a speech model (about 40 MB).')
+              : 'Your speech is sent to your browser\u2019s online speech service to be turned into text.'}
+          </p>
+        </div>`}
+        ${!canSpeak && html`<p class="muted small">This browser has no voice input, so type your command.</p>`}
+        ${status && html`<p class="small" role="status">${status}</p>`}
         ${micError && html`<p class="error">${micError}</p>`}
         ${error && html`<p class="error">${error}</p>`}
 
