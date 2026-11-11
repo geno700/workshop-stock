@@ -53,6 +53,20 @@ export function WorkshopManager({ workshops, current, onChange }) {
     });
   };
 
+  const remove = (w) => {
+    const typed = prompt(
+      `Delete ${w.name}? Its items, history, projects, suppliers and team are removed for everyone. This cannot be undone.\n\nType the workshop name to confirm:`,
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== w.name.trim().toLowerCase()) return toast('The name did not match, so nothing was deleted', true);
+    run(async () => {
+      await db.deleteWorkshop(w.id);
+      toast(`${w.name} was deleted`);
+      if (w.id === current?.id) location.hash = '#/';
+      await onChange();
+    });
+  };
+
   return html`
     ${workshops.length > 0 &&
     html`<div class="card list" style="margin-bottom:16px">
@@ -67,6 +81,8 @@ export function WorkshopManager({ workshops, current, onChange }) {
               ${w.id !== current?.id &&
               w.role !== 'pending' &&
               html`<button class="btn small" onClick=${() => switchWorkshop(w.id)}>Open</button>`}
+              ${w.role === 'admin' &&
+              html`<button class="btn small danger" disabled=${busy} onClick=${() => remove(w)}>Delete</button>`}
               ${w.role !== 'admin' &&
               html`<button class="btn small" disabled=${busy} onClick=${() => leave(w)}>
                 ${w.role === 'pending' ? 'Cancel request' : 'Leave'}

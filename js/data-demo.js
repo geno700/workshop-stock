@@ -335,6 +335,15 @@ export default {
     persist();
     return w.join_code;
   },
+  async deleteWorkshop(id) {
+    const m = state.memberships.find((x) => x.workshop_id === id && x.user_id === ME);
+    if (m?.role !== 'admin') throw new Error('Only an admin can delete a workshop');
+    for (const k of ['items', 'movements', 'locations', 'projects', 'suppliers', 'memberships']) {
+      state[k] = state[k].filter((x) => x.workshop_id !== id);
+    }
+    state.workshops = state.workshops.filter((w) => w.id !== id);
+    persist();
+  },
   async leaveWorkshop(id) {
     const m = state.memberships.find((x) => x.workshop_id === id && x.user_id === ME);
     if (m?.role === 'admin') throw new Error('An admin cannot leave their own workshop');

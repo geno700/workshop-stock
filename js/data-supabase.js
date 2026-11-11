@@ -125,6 +125,11 @@ export default {
   async newJoinCode() {
     return ok(await sb.rpc('new_join_code', { p_workshop: here() }));
   },
+  // Removes the workshop with all its stock, history and team. Admins only.
+  async deleteWorkshop(id) {
+    const gone = ok(await sb.from('workshops').delete().eq('id', id).select('id'));
+    if (!gone.length) throw new Error('Only an admin can delete a workshop');
+  },
   async leaveWorkshop(id) {
     const user = await this.getUser();
     const gone = ok(await sb.from('memberships').delete().eq('workshop_id', id).eq('user_id', user.id).select('user_id'));
