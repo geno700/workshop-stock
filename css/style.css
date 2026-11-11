@@ -309,3 +309,4 @@ dl { margin: 0; }
 .row.wrap .main { flex: 1 1 200px; }
 .modal.ask p { white-space: pre-line; }
 .btn.primary.danger-fill { background: var(--danger); border-color: var(--danger); }
+.engine { display: grid; gap: 6px; }
