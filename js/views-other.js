@@ -1,7 +1,7 @@
 // Movement list (shared), full history page and team page.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, useLoad, toCSV, download, today, appBase } from './ui.js';
+import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, ask, useLoad, toCSV, download, today, appBase } from './ui.js';
 
 export function exportMoves(moves, name = 'stock-history') {
   const rows = moves.map((m) => [
@@ -105,29 +105,33 @@ export function Team({ me, workshop, onChange }) {
       await db.setRole(person.id, role);
       toast(`${person.full_name || person.email} is now: ${ROLES[role]}`);
     }).then(reload);
-  const remove = (person) => {
+  const remove = async (person) => {
     const who = person.full_name || person.email;
-    if (!confirm(`Remove ${who} from ${workshop.name}?`)) return;
+    if (!(await ask(`Remove ${who} from ${workshop.name}?`, { ok: 'Remove', danger: true }))) return;
     attempt(async () => {
       await db.removeMember(person.id);
       toast(`${who} was removed`);
     }).then(reload);
   };
-  const copyLink = () =>
-    attempt(async () => {
+  const copyLink = async () => {
+    try {
       await navigator.clipboard.writeText(link);
       toast('Invite link copied');
-    });
-  const newCode = () => {
-    if (!confirm('Make a new join code? The old code and invite link will stop working.')) return;
+    } catch {
+      // Copying is blocked here: show the link selected so it can be copied by hand.
+      ask('Copy this invite link and send it to your team:', { input: true, value: link, ok: 'Done' });
+    }
+  };
+  const newCode = async () => {
+    if (!(await ask('Make a new join code? The old code and invite link will stop working.', { ok: 'Make new code' }))) return;
     attempt(async () => {
       setCode(await db.newJoinCode());
       toast('New join code made');
       onChange();
     });
   };
-  const rename = () => {
-    const name = prompt('Workshop name', workshop.name)?.trim();
+  const rename = async () => {
+    const name = (await ask('Workshop name', { input: true, value: workshop.name, ok: 'Rename' }))?.trim();
     if (!name || name === workshop.name) return;
     attempt(async () => {
       await db.renameWorkshop(name);

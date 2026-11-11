@@ -2,7 +2,7 @@
 import { html, useState, useMemo } from './lib.js';
 import { db } from './data.js';
 import {
-  KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, useLoad, toCSV, download, today,
+  KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, ask, useLoad, toCSV, download, today,
 } from './ui.js';
 
 export const ITEM_CSV = [
@@ -268,7 +268,7 @@ export function ItemDetail({ me, id }) {
   if (!item) return html`<p class="state">This item does not exist. <a href="#/items"><u>Back to items</u></a></p>`;
 
   async function archive() {
-    if (!confirm(`Remove "${item.name}" from the list? Its history is kept.`)) return;
+    if (!(await ask(`Remove "${item.name}" from the list? Its history is kept.`, { ok: 'Remove', danger: true }))) return;
     try {
       await db.archiveItem(item.id);
       toast('Item removed');
@@ -282,8 +282,8 @@ export function ItemDetail({ me, id }) {
   const latest = moves[0];
   const undoId =
     me.canEdit && latest && latest.user_id === me.id && !isUndo(latest) && Number(latest.delta) !== 0 ? latest.id : null;
-  const undoLatest = () => {
-    if (confirm('Undo this entry? An opposite entry will be added to the history.')) runUndo(latest);
+  const undoLatest = async () => {
+    if (await ask('Undo this entry? An opposite entry will be added to the history.', { ok: 'Undo' })) runUndo(latest);
   };
 
   const isTool = item.kind === 'tool';

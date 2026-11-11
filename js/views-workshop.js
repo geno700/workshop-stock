@@ -1,7 +1,7 @@
 // Workshops: start one, ask to join one with a code, switch between them.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { ROLES, toast, switchWorkshop } from './ui.js';
+import { ROLES, toast, ask, switchWorkshop } from './ui.js';
 
 // Used on the welcome screen, the waiting screen and the Workshops page.
 // onChange reloads the list of workshops after something changed.
@@ -43,8 +43,8 @@ export function WorkshopManager({ workshops, current, onChange }) {
     });
   };
 
-  const leave = (w) => {
-    if (!confirm(`Leave ${w.name}? You will need a new invitation to come back.`)) return;
+  const leave = async (w) => {
+    if (!(await ask(`Leave ${w.name}? You will need a new invitation to come back.`, { ok: 'Leave', danger: true }))) return;
     run(async () => {
       await db.leaveWorkshop(w.id);
       toast(`You left ${w.name}`);
@@ -53,9 +53,10 @@ export function WorkshopManager({ workshops, current, onChange }) {
     });
   };
 
-  const remove = (w) => {
-    const typed = prompt(
+  const remove = async (w) => {
+    const typed = await ask(
       `Delete ${w.name}? Its items, history, projects, suppliers and team are removed for everyone. This cannot be undone.\n\nType the workshop name to confirm:`,
+      { input: true, ok: 'Delete workshop', danger: true },
     );
     if (typed === null) return;
     if (typed.trim().toLowerCase() !== w.name.trim().toLowerCase()) return toast('The name did not match, so nothing was deleted', true);

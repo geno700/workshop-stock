@@ -2,7 +2,7 @@
 import { html, render, useState, useEffect } from './lib.js';
 import { db, demoMode } from './data.js';
 import { config } from '../config.js';
-import { toast, go, lastWorkshop, rememberWorkshop } from './ui.js';
+import { toast, ask, go, lastWorkshop, rememberWorkshop } from './ui.js';
 import { Dashboard, Items, ItemDetail, ItemForm } from './views-items.js';
 import { History, Team } from './views-other.js';
 import { Locations, Labels } from './views-places.js';
@@ -187,8 +187,15 @@ function App() {
       const invite = takeInvite(true);
       if (invite && !db.inRecovery()) {
         try {
+          const before = await db.listWorkshops();
           const w = await db.joinWorkshop(invite);
           rememberWorkshop(w.id);
+          const had = before.find((x) => x.id === w.id);
+          toast(
+            had && had.role !== 'pending'
+              ? `You are already in ${w.name}`
+              : `Request sent to ${w.name}. An admin there needs to approve you.`,
+          );
         } catch (err) {
           toast(err.message, true);
         }

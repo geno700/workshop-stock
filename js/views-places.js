@@ -1,7 +1,7 @@
 // Locations page and printable QR labels.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { appBase, toast, useLoad } from './ui.js';
+import { appBase, toast, ask, useLoad } from './ui.js';
 
 const QR_LIB = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/+esm';
 
@@ -20,7 +20,7 @@ export function Locations({ me }) {
   const { locations, counts, unplaced } = data;
 
   async function rename(loc) {
-    const name = prompt('New name for this location', loc.name);
+    const name = await ask('New name for this location', { input: true, value: loc.name, ok: 'Rename' });
     if (!name || !name.trim() || name.trim() === loc.name) return;
     try {
       await db.renameLocation(loc.id, name);
@@ -34,7 +34,7 @@ export function Locations({ me }) {
   async function remove(loc) {
     const n = counts[loc.id] ?? 0;
     const warn = n ? ` Its ${n} item${n === 1 ? '' : 's'} will be left without a location.` : '';
-    if (!confirm(`Delete the location "${loc.name}"?${warn}`)) return;
+    if (!(await ask(`Delete the location "${loc.name}"?${warn}`, { ok: 'Delete', danger: true }))) return;
     try {
       await db.deleteLocation(loc.id);
       toast('Location deleted');

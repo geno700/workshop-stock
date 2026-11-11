@@ -1,7 +1,7 @@
 // Projects, suppliers and CSV import.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { KINDS, UNITS, fmtNum, fmtMoney, moveCost, go, toast, useLoad, parseCSV, toCSV, download } from './ui.js';
+import { KINDS, UNITS, fmtNum, fmtMoney, moveCost, go, toast, ask, useLoad, parseCSV, toCSV, download } from './ui.js';
 import { MovementList, exportMoves } from './views-other.js';
 import { ITEM_CSV } from './views-items.js';
 
@@ -108,8 +108,8 @@ export function ProjectDetail({ me, id }) {
     }
     reload();
   }
-  function rename() {
-    const name = prompt('Project name', project.name);
+  async function rename() {
+    const name = await ask('Project name', { input: true, value: project.name, ok: 'Rename' });
     if (name && name.trim() && name.trim() !== project.name) update({ name }, 'Project renamed');
   }
 
@@ -185,7 +185,7 @@ function SupplierDialog({ supplier, me, onClose, onDone }) {
     }
   }
   async function remove() {
-    if (!confirm(`Delete the supplier "${supplier.name}"? Items keep their stock but lose this supplier.`)) return;
+    if (!(await ask(`Delete the supplier "${supplier.name}"? Items keep their stock but lose this supplier.`, { ok: 'Delete', danger: true }))) return;
     try {
       await db.deleteSupplier(supplier.id);
       toast('Supplier deleted');

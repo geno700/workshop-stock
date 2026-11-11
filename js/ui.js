@@ -111,6 +111,59 @@ export function toast(message, bad = false, action = null) {
   setTimeout(() => el.remove(), action ? 10000 : bad ? 5000 : 2500);
 }
 
+// In-app question box. Browsers' own prompt() and confirm() are blocked in some places.
+// With { input: true } it resolves to the typed text (null if cancelled); otherwise to true or false.
+export function ask(message, { input = false, value = '', ok = 'OK', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    const box = document.createElement('form');
+    box.className = 'modal form ask';
+    const text = document.createElement('p');
+    text.textContent = message;
+    box.append(text);
+    let field = null;
+    if (input) {
+      field = document.createElement('input');
+      field.value = value;
+      field.setAttribute('aria-label', message);
+      box.append(field);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const yes = document.createElement('button');
+    yes.className = 'btn primary' + (danger ? ' danger-fill' : '');
+    yes.textContent = ok;
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'btn';
+    no.textContent = 'Cancel';
+    actions.append(yes, no);
+    box.append(actions);
+    overlay.append(box);
+
+    const done = (result) => {
+      removeEventListener('keydown', onKey);
+      overlay.remove();
+      resolve(result);
+    };
+    const cancel = () => done(input ? null : false);
+    const onKey = (e) => e.key === 'Escape' && cancel();
+    box.onsubmit = (e) => {
+      e.preventDefault();
+      done(input ? field.value : true);
+    };
+    no.onclick = cancel;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) cancel();
+    });
+    addEventListener('keydown', onKey);
+    document.body.append(overlay);
+    (field ?? yes).focus();
+    field?.select();
+  });
+}
+
 // Cost of the material in one movement, at the item's current unit cost.
 export const moveCost = (m) => Math.abs(Number(m.delta)) * Number(m.unit_cost ?? 0);
 
