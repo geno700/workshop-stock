@@ -2,15 +2,42 @@
 import { html, render, useState, useEffect } from './lib.js';
 import { db, demoMode } from './data.js';
 import { config } from '../config.js';
-import { toast } from './ui.js';
+import { toast, go, lastWorkshop, rememberWorkshop } from './ui.js';
 import { Dashboard, Items, ItemDetail, ItemForm } from './views-items.js';
 import { History, Team } from './views-other.js';
 import { Locations, Labels } from './views-places.js';
 import { Projects, ProjectDetail, Suppliers, ImportItems } from './views-manage.js';
 import { Voice } from './voice.js';
+import { WorkshopManager, Workshops } from './views-workshop.js';
+
+// An invite link looks like .../?join=CODE. Keep the code until the person has signed in.
+const INVITE_KEY = 'workshop-stock-invite';
+{
+  const url = new URL(location.href);
+  const code = url.searchParams.get('join');
+  if (code) {
+    try {
+      sessionStorage.setItem(INVITE_KEY, code);
+    } catch {
+      // Storage blocked: the person can still type the code in.
+    }
+    url.searchParams.delete('join');
+    history.replaceState(null, '', url);
+  }
+}
+function takeInvite(clear) {
+  try {
+    const code = sessionStorage.getItem(INVITE_KEY);
+    if (clear) sessionStorage.removeItem(INVITE_KEY);
+    return code;
+  } catch {
+    return null;
+  }
+}
 
 function useRoute() {
-  const read = () => location.hash.slice(1) || '/';
+  // Sign-in links put their own data after the #, which is not a page of this app.
+  const read = () => (location.hash.startsWith('#/') ? location.hash.slice(1) : '/');
   const [route, setRoute] = useState(read());
   useEffect(() => {
     const onChange = () => {
@@ -23,17 +50,18 @@ function useRoute() {
   return route;
 }
 
-function Brand() {
-  return html`<a class="brand" href="#/"><span class="brand-mark"></span>${config.workshopName}</a>`;
+function Brand({ name = config.workshopName }) {
+  return html`<a class="brand" href="#/"><span class="brand-mark"></span><span class="brand-name">${name}</span></a>`;
 }
 
 function Login() {
-  const [mode, setMode] = useState('in');
+  const [mode, setMode] = useState('in'); // in | up | reset
   const [f, setF] = useState({ email: '', password: '', name: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const to = (m) => { setMode(m); setError(''); setNotice(''); };
 
   async function submit(e) {
     e.preventDefault();
@@ -41,7 +69,10 @@ function Login() {
     setError('');
     try {
       if (mode === 'in') await db.signIn(f.email.trim(), f.password);
-      else {
+      else if (mode === 'reset') {
+        await db.sendPasswordReset(f.email.trim());
+        setNotice('If this email has an account, a link to set a new password is on its way.');
+      } else {
         const res = await db.signUp(f.email.trim(), f.password, f.name.trim());
         if (res.needsConfirm) setNotice('Check your email and open the confirmation link, then sign in here.');
       }
@@ -51,48 +82,94 @@ function Login() {
     setBusy(false);
   }
 
+  const title = { in: 'Sign in', up: 'Create account', reset: 'Reset password' }[mode];
+
   return html`
     <div class="auth">
       <${Brand} />
       <form class="card pad form" onSubmit=${submit}>
-        <h1>${mode === 'in' ? 'Sign in' : 'Create account'}</h1>
+        <h1>${title}</h1>
+        ${takeInvite() && html`<p class="small">You have been invited to a workshop. Sign in or create an account to join it.</p>`}
         ${notice && html`<p class="small">${notice}</p>`}
         ${error && html`<p class="error">${error}</p>`}
         ${mode === 'up' &&
         html`<label><span>Your name</span><input required value=${f.name} onInput=${set('name')} autocomplete="name" /></label>`}
         <label><span>Email</span><input type="email" required value=${f.email} onInput=${set('email')} autocomplete="email" /></label>
-        <label>
+        ${mode !== 'reset' &&
+        html`<label>
           <span>Password</span>
           <input type="password" required minlength="6" value=${f.password} onInput=${set('password')}
             autocomplete=${mode === 'in' ? 'current-password' : 'new-password'} />
-        </label>
-        <button class="btn primary" disabled=${busy}>${mode === 'in' ? 'Sign in' : 'Create account'}</button>
+        </label>`}
+        <button class="btn primary" disabled=${busy}>${mode === 'reset' ? 'Send reset link' : title}</button>
       </form>
       <p class="switch">
-        ${mode === 'in' ? 'New here? ' : 'Already have an account? '}
-        <button type="button" onClick=${() => { setMode(mode === 'in' ? 'up' : 'in'); setError(''); setNotice(''); }}>
-          ${mode === 'in' ? 'Create an account' : 'Sign in'}
+        ${mode === 'in' ? 'New here? ' : mode === 'up' ? 'Already have an account? ' : ''}
+        <button type="button" onClick=${() => to(mode === 'in' ? 'up' : 'in')}>
+          ${mode === 'in' ? 'Create an account' : mode === 'up' ? 'Sign in' : 'Back to sign in'}
         </button>
       </p>
+      ${mode === 'in' &&
+      html`<p class="switch"><button type="button" onClick=${() => to('reset')}>Forgot your password?</button></p>`}
     </div>
   `;
 }
 
-function Pending({ profile }) {
+function SetPassword({ onDone }) {
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await db.setPassword(password);
+      toast('Password changed');
+      onDone();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  }
+
   return html`
     <div class="auth">
       <${Brand} />
-      <div class="card pad form">
-        <h1>Waiting for approval</h1>
+      <form class="card pad form" onSubmit=${submit}>
+        <h1>Choose a new password</h1>
+        ${error && html`<p class="error">${error}</p>`}
+        <label>
+          <span>New password</span>
+          <input type="password" required minlength="6" value=${password} onInput=${(e) => setPassword(e.target.value)}
+            autocomplete="new-password" />
+        </label>
+        <button class="btn primary" disabled=${busy}>Save password</button>
+      </form>
+    </div>
+  `;
+}
+
+// Shown when the person has no workshop to open: none yet, or still waiting for approval.
+function Welcome({ auth, onChange }) {
+  const waiting = auth.current?.role === 'pending';
+  return html`
+    <div class="auth wide">
+      <${Brand} />
+      <div class="card pad form" style="margin-bottom:16px">
+        <h1>${waiting ? 'Waiting for approval' : 'Welcome'}</h1>
         <p class="muted">
-          Your account (${profile?.email}) has been created. An admin of this workshop needs to give you access
-          before you can see the stock.
+          ${waiting
+            ? `Your request to join ${auth.current.name} has been sent. An admin there needs to give you access before you can see the stock.`
+            : 'Join the workshop you were invited to, or start your own and invite your team.'}
         </p>
         <div class="actions">
-          <button class="btn" onClick=${() => location.reload()}>Check again</button>
-          <button class="btn" onClick=${() => db.signOut()}>Sign out</button>
+          ${waiting && html`<button class="btn" onClick=${onChange}>Check again</button>`}
+          ${!demoMode && html`<button class="btn" onClick=${() => db.signOut()}>Sign out (${auth.profile?.email})</button>`}
         </div>
       </div>
+      <${WorkshopManager} workshops=${auth.workshops} current=${auth.current} onChange=${onChange} />
     </div>
   `;
 }
@@ -104,8 +181,25 @@ function App() {
   async function refresh() {
     try {
       const user = await db.getUser();
-      const profile = user ? await db.getProfile() : null;
-      setAuth({ user, profile });
+      if (!user) return setAuth({ user: null });
+      const profile = await db.getProfile();
+
+      const invite = takeInvite(true);
+      if (invite && !db.inRecovery()) {
+        try {
+          const w = await db.joinWorkshop(invite);
+          rememberWorkshop(w.id);
+        } catch (err) {
+          toast(err.message, true);
+        }
+      }
+
+      const workshops = await db.listWorkshops();
+      const last = lastWorkshop();
+      const current =
+        workshops.find((w) => w.id === last) ?? workshops.find((w) => w.role !== 'pending') ?? workshops[0] ?? null;
+      if (current) db.useWorkshop(current.id);
+      setAuth({ user, profile, workshops, current });
     } catch (err) {
       setAuth({ error: err.message });
     }
@@ -118,11 +212,12 @@ function App() {
   if (auth.loading) return html`<p class="boot">Loading…</p>`;
   if (auth.error) return html`<p class="state">Could not connect: ${auth.error}</p>`;
   if (!auth.user) return html`<${Login} />`;
+  if (db.inRecovery()) return html`<${SetPassword} onDone=${refresh} />`;
 
-  const role = auth.profile?.role ?? 'pending';
-  if (role === 'pending') return html`<${Pending} profile=${auth.profile} />`;
+  const role = auth.current?.role ?? 'pending';
+  if (role === 'pending') return html`<${Welcome} auth=${auth} onChange=${refresh} />`;
 
-  const me = { ...auth.profile, canEdit: role === 'member' || role === 'admin', isAdmin: role === 'admin' };
+  const me = { ...auth.profile, role, canEdit: role === 'member' || role === 'admin', isAdmin: role === 'admin' };
   const parts = route.split('?')[0].split('/').filter(Boolean);
   const section = parts[0] ?? '';
 
@@ -142,7 +237,8 @@ function App() {
   else if (section === 'suppliers') view = html`<${Suppliers} me=${me} />`;
   else if (section === 'import') view = html`<${ImportItems} me=${me} />`;
   else if (section === 'history') view = html`<${History} />`;
-  else if (section === 'team' && me.isAdmin) view = html`<${Team} me=${me} />`;
+  else if (section === 'team' && me.isAdmin) view = html`<${Team} me=${me} workshop=${auth.current} onChange=${refresh} />`;
+  else if (section === 'workshops') view = html`<${Workshops} workshops=${auth.workshops} current=${auth.current} onChange=${refresh} />`;
   else view = html`<p class="state">Page not found. <a href="#/"><u>Go to the dashboard</u></a></p>`;
 
   const navSection = ['locations', 'labels', 'suppliers', 'import'].includes(section) ? 'items' : section;
@@ -156,7 +252,7 @@ function App() {
       <button onClick=${() => { db.resetDemo(); toast('Sample data restored'); location.reload(); }}>Reset sample data</button>
     </div>`}
     <header class="topbar">
-      <${Brand} />
+      <${Brand} name=${auth.current.name} />
       <nav class="nav">
         ${link('#/', 'Home', '')} ${link('#/items', 'Items', 'items')} ${link('#/projects', 'Projects', 'projects')}
         ${link('#/history', 'History', 'history')}
@@ -164,6 +260,7 @@ function App() {
       </nav>
       <div class="user">
         <span class="who">${me.full_name || me.email}</span>
+        <button class="btn small" onClick=${() => go('/workshops')}>Workshops</button>
         ${!demoMode && html`<button class="btn small" onClick=${() => db.signOut()}>Sign out</button>`}
       </div>
     </header>

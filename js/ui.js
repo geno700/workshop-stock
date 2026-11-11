@@ -40,6 +40,28 @@ export const isLow = (item) =>
 // Address used inside QR codes, so labels printed from this PC still point at the live app.
 export const appBase = () => config.appUrl || location.origin + location.pathname;
 
+// The workshop this browser last worked in. Switching reloads the app inside the other workshop.
+const CURRENT_KEY = 'workshop-stock-current';
+export function lastWorkshop() {
+  try {
+    return localStorage.getItem(CURRENT_KEY);
+  } catch {
+    return null;
+  }
+}
+export function rememberWorkshop(id) {
+  try {
+    localStorage.setItem(CURRENT_KEY, id);
+  } catch {
+    // Storage blocked: the first workshop is used on the next visit.
+  }
+}
+export function switchWorkshop(id) {
+  rememberWorkshop(id);
+  location.hash = '#/';
+  location.reload();
+}
+
 // Works out which borrowed tools are still out, from 'checkout' and 'return' movements.
 // A return is matched to the same person's oldest loan first, then to anyone's oldest loan.
 export function openLoans(moves) {

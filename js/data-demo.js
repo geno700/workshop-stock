@@ -1,8 +1,9 @@
 // Demo data source: everything lives in this browser's localStorage.
 // Mirrors the API of data-supabase.js so the rest of the app doesn't care which is in use.
 
-const KEY = 'workshop-stock-demo-v3';
+const KEY = 'workshop-stock-demo-v4';
 const ME = 'demo-user';
+const W1 = 'demo-workshop';
 
 const uid = () =>
   globalThis.crypto?.randomUUID?.() ?? 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -37,12 +38,12 @@ function seed() {
   };
   const loc = (name) => {
     let l = s.locations.find((x) => x.name === name);
-    if (!l) s.locations.push((l = { id: uid(), name }));
+    if (!l) s.locations.push((l = { id: uid(), name, workshop_id: W1 }));
     return l.id;
   };
   const add = (f, qty, moves = []) => {
     const item = {
-      id: uid(), archived: false, notes: '', specs: {}, min_quantity: 0, unit_cost: 0, category: '',
+      id: uid(), workshop_id: W1, archived: false, notes: '', specs: {}, min_quantity: 0, unit_cost: 0, category: '',
       ...f, location_id: loc(f.location), supplier_id: SUPPLIER[f.category] ?? null, quantity: 0,
       created_at: daysAgo(35), updated_at: daysAgo(35),
     };
@@ -52,7 +53,7 @@ function seed() {
       const delta = type === 'out' || type === 'checkout' ? -q : q;
       item.quantity += delta;
       s.movements.push({
-        id: uid(), item_id: item.id, type, quantity: q, delta, balance_after: item.quantity,
+        id: uid(), workshop_id: W1, item_id: item.id, type, quantity: q, delta, balance_after: item.quantity,
         reason, project_id: type === 'out' ? PROJECT[reason] ?? null : null, user_id: who, created_at: daysAgo(d),
       });
     };
@@ -94,6 +95,11 @@ function seed() {
     [['checkout', 1, 'Shaft inspection', 'p2', 3]]);
   add({ name: 'Cordless drill 18 V', kind: 'tool', category: 'Power tools', unit: 'pcs', min_quantity: 1, unit_cost: 140,
     location: 'Tool wall', specs: { serial: 'DRL-01', condition: 'Good' } }, 2);
+
+  [...s.projects, ...s.suppliers].forEach((x) => (x.workshop_id = W1));
+  s.workshops = [{ id: W1, name: 'Demo workshop', join_code: 'DEMO2468', created_at: daysAgo(40) }];
+  s.memberships = s.profiles.map((p) => ({ workshop_id: W1, user_id: p.id, role: p.role, created_at: p.created_at }));
+  s.profiles.forEach((p) => delete p.role);
   return s;
 }
 
@@ -114,6 +120,10 @@ function persist() {
   }
 }
 persist();
+
+// The workshop being worked in; every list below is limited to it.
+let cur = W1;
+const mine = (list) => list.filter((x) => x.workshop_id === cur);
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
 const locName = (id) => state.locations.find((l) => l.id === id)?.name ?? '';
@@ -136,8 +146,8 @@ const flatMove = (m) => {
 function ensureLocation(name) {
   const n = (name ?? '').trim();
   if (!n) return null;
-  let l = state.locations.find((x) => x.name.toLowerCase() === n.toLowerCase());
-  if (!l) state.locations.push((l = { id: uid(), name: n }));
+  let l = mine(state.locations).find((x) => x.name.toLowerCase() === n.toLowerCase());
+  if (!l) state.locations.push((l = { id: uid(), name: n, workshop_id: cur }));
   return l.id;
 }
 
@@ -158,10 +168,10 @@ export default {
   },
 
   async listItems() {
-    return state.items.filter((i) => !i.archived).map(flatItem).sort((a, b) => a.name.localeCompare(b.name));
+    return mine(state.items).filter((i) => !i.archived).map(flatItem).sort((a, b) => a.name.localeCompare(b.name));
   },
   async getItem(id) {
-    const i = state.items.find((x) => x.id === id);
+    const i = mine(state.items).find((x) => x.id === id);
     return i ? flatItem(i) : null;
   },
   async saveItem(f) {
@@ -176,7 +186,7 @@ export default {
       if (!item) throw new Error('Item not found');
       Object.assign(item, fields);
     } else {
-      item = { id: uid(), quantity: 0, archived: false, created_at: new Date().toISOString(), ...fields };
+      item = { id: uid(), workshop_id: cur, quantity: 0, archived: false, created_at: new Date().toISOString(), ...fields };
       state.items.push(item);
     }
     persist();
@@ -188,26 +198,26 @@ export default {
     persist();
   },
   async listLocations() {
-    return copy(state.locations).sort((a, b) => a.name.localeCompare(b.name));
+    return copy(mine(state.locations)).sort((a, b) => a.name.localeCompare(b.name));
   },
 
   async listProjects() {
-    return copy(state.projects).sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return copy(mine(state.projects)).sort((a, b) => b.created_at.localeCompare(a.created_at));
   },
   async saveProject(f) {
     let p = state.projects.find((x) => x.id === f.id);
-    if (!p) state.projects.push((p = { id: uid(), status: 'active', notes: '', created_at: new Date().toISOString() }));
+    if (!p) state.projects.push((p = { id: uid(), workshop_id: cur, status: 'active', notes: '', created_at: new Date().toISOString() }));
     if (f.name !== undefined) p.name = f.name.trim();
     if (f.status !== undefined) p.status = f.status;
     persist();
     return copy(p);
   },
   async listSuppliers() {
-    return copy(state.suppliers).sort((a, b) => a.name.localeCompare(b.name));
+    return copy(mine(state.suppliers)).sort((a, b) => a.name.localeCompare(b.name));
   },
   async saveSupplier(f) {
     let s = state.suppliers.find((x) => x.id === f.id);
-    if (!s) state.suppliers.push((s = { id: uid(), created_at: new Date().toISOString() }));
+    if (!s) state.suppliers.push((s = { id: uid(), workshop_id: cur, created_at: new Date().toISOString() }));
     Object.assign(s, { name: f.name, contact: f.contact, phone: f.phone, email: f.email, notes: f.notes });
     persist();
     return copy(s);
@@ -236,7 +246,7 @@ export default {
     item.quantity = balance;
     item.updated_at = new Date().toISOString();
     const row = {
-      id: uid(), item_id, type, quantity: q, delta: Math.round(delta * 1e6) / 1e6, balance_after: balance,
+      id: uid(), workshop_id: cur, item_id, type, quantity: q, delta: Math.round(delta * 1e6) / 1e6, balance_after: balance,
       reason: (reason ?? '').trim() || null, project_id: project_id || null, user_id: ME,
       created_at: new Date().toISOString(),
     };
@@ -246,7 +256,7 @@ export default {
   },
   async renameLocation(id, name) {
     const n = name.trim();
-    if (state.locations.some((l) => l.id !== id && l.name.toLowerCase() === n.toLowerCase())) {
+    if (mine(state.locations).some((l) => l.id !== id && l.name.toLowerCase() === n.toLowerCase())) {
       throw new Error('A location with this name already exists');
     }
     const l = state.locations.find((x) => x.id === id);
@@ -262,7 +272,7 @@ export default {
   },
 
   async listMovements({ item_id, types, project_id, with_project, limit = 200 } = {}) {
-    return state.movements
+    return mine(state.movements)
       .filter(
         (m) =>
           (!item_id || m.item_id === item_id) &&
@@ -275,14 +285,66 @@ export default {
       .map(flatMove);
   },
 
+  // ---- team of the current workshop
   async listProfiles() {
-    return copy(state.profiles).sort((a, b) => a.created_at.localeCompare(b.created_at));
+    return mine(state.memberships)
+      .map((m) => ({ ...copy(state.profiles.find((p) => p.id === m.user_id)), role: m.role, created_at: m.created_at }))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
   },
   async setRole(id, role) {
-    const p = state.profiles.find((x) => x.id === id);
-    if (p) p.role = role;
+    const m = mine(state.memberships).find((x) => x.user_id === id);
+    if (m) m.role = role;
     persist();
   },
+  async removeMember(id) {
+    state.memberships = state.memberships.filter((m) => !(m.workshop_id === cur && m.user_id === id));
+    persist();
+  },
+
+  // ---- workshops
+  async listWorkshops() {
+    return state.memberships
+      .filter((m) => m.user_id === ME)
+      .map((m) => ({ ...copy(state.workshops.find((w) => w.id === m.workshop_id)), role: m.role }));
+  },
+  useWorkshop(id) {
+    cur = id;
+  },
+  async createWorkshop(name) {
+    const n = (name ?? '').trim();
+    if (!n) throw new Error('Give the workshop a name');
+    const w = { id: uid(), name: n, join_code: uid().replace(/-/g, '').slice(0, 8).toUpperCase(), created_at: new Date().toISOString() };
+    state.workshops.push(w);
+    state.memberships.push({ workshop_id: w.id, user_id: ME, role: 'admin', created_at: w.created_at });
+    persist();
+    return copy(w);
+  },
+  async joinWorkshop(code) {
+    const c = (code ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+    const w = state.workshops.find((x) => x.join_code === c);
+    if (!w) throw new Error('No workshop has this join code');
+    return copy(w);
+  },
+  async renameWorkshop(name) {
+    state.workshops.find((w) => w.id === cur).name = name.trim();
+    persist();
+  },
+  async newJoinCode() {
+    const w = state.workshops.find((x) => x.id === cur);
+    w.join_code = uid().replace(/-/g, '').slice(0, 8).toUpperCase();
+    persist();
+    return w.join_code;
+  },
+  async leaveWorkshop(id) {
+    const m = state.memberships.find((x) => x.workshop_id === id && x.user_id === ME);
+    if (m?.role === 'admin') throw new Error('An admin cannot leave their own workshop');
+    state.memberships = state.memberships.filter((x) => x !== m);
+    persist();
+  },
+
+  async sendPasswordReset() {},
+  inRecovery: () => false,
+  async setPassword() {},
 
   resetDemo() {
     state = seed();

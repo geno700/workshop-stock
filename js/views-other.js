@@ -1,7 +1,7 @@
 // Movement list (shared), full history page and team page.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, useLoad, toCSV, download, today } from './ui.js';
+import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, useLoad, toCSV, download, today, appBase } from './ui.js';
 
 export function exportMoves(moves, name = 'stock-history') {
   const rows = moves.map((m) => [
@@ -84,43 +84,95 @@ export function History() {
   `;
 }
 
-export function Team({ me }) {
+export function Team({ me, workshop, onChange }) {
   const { data: people, error, loading, reload } = useLoad(() => db.listProfiles());
+  const [code, setCode] = useState(workshop.join_code);
 
   if (loading) return html`<p class="state">Loading…</p>`;
   if (error) return html`<p class="state">Something went wrong: ${error.message}</p>`;
 
-  async function change(person, role) {
+  const link = appBase() + '?join=' + code;
+
+  async function attempt(fn) {
     try {
-      await db.setRole(person.id, role);
-      toast(`${person.full_name || person.email} is now: ${ROLES[role]}`);
+      await fn();
     } catch (err) {
       toast(err.message, true);
     }
-    reload();
   }
+  const change = (person, role) =>
+    attempt(async () => {
+      await db.setRole(person.id, role);
+      toast(`${person.full_name || person.email} is now: ${ROLES[role]}`);
+    }).then(reload);
+  const remove = (person) => {
+    const who = person.full_name || person.email;
+    if (!confirm(`Remove ${who} from ${workshop.name}?`)) return;
+    attempt(async () => {
+      await db.removeMember(person.id);
+      toast(`${who} was removed`);
+    }).then(reload);
+  };
+  const copyLink = () =>
+    attempt(async () => {
+      await navigator.clipboard.writeText(link);
+      toast('Invite link copied');
+    });
+  const newCode = () => {
+    if (!confirm('Make a new join code? The old code and invite link will stop working.')) return;
+    attempt(async () => {
+      setCode(await db.newJoinCode());
+      toast('New join code made');
+      onChange();
+    });
+  };
+  const rename = () => {
+    const name = prompt('Workshop name', workshop.name)?.trim();
+    if (!name || name === workshop.name) return;
+    attempt(async () => {
+      await db.renameWorkshop(name);
+      toast('Workshop renamed');
+      onChange();
+    });
+  };
 
   const waiting = people.filter((p) => p.role === 'pending').length;
 
   return html`
-    <div class="page-head"><h1>Team</h1></div>
-    <p class="muted" style="margin-bottom:14px">
-      To add someone, send them the link to this app and ask them to create an account. They appear here as
-      waiting, and you choose what they can do.
-      ${waiting > 0 && html` <strong>${waiting} waiting for approval.</strong>`}
-    </p>
+    <div class="page-head">
+      <h1>Team</h1>
+      <button class="btn" onClick=${rename}>Rename workshop</button>
+    </div>
+    <div class="card pad form" style="margin-bottom:16px">
+      <h2>Invite people to ${workshop.name}</h2>
+      <p class="muted small">
+        Send this link, or the join code. They create an account, appear below as waiting, and you choose what they can do.
+      </p>
+      <dl class="facts">
+        <div><dt>Invite link</dt><dd>${link}</dd></div>
+        <div><dt>Join code</dt><dd class="join-code">${code}</dd></div>
+      </dl>
+      <div class="actions">
+        <button class="btn primary" onClick=${copyLink}>Copy invite link</button>
+        <button class="btn" onClick=${newCode}>New join code</button>
+      </div>
+    </div>
+    ${waiting > 0 && html`<p style="margin-bottom:10px"><strong>${waiting} waiting for approval.</strong></p>`}
     <div class="card list">
       ${people.map(
         (p) => html`
-          <div class="row" key=${p.id}>
+          <div class="row wrap" key=${p.id}>
             <div class="main">
               <div class="title">${p.full_name || p.email} ${p.id === me.id && html`<span class="badge">You</span>`}</div>
               <div class="sub">${p.email}</div>
             </div>
-            <select style="width:auto;max-width:55%" value=${p.role} disabled=${p.id === me.id}
-              onChange=${(e) => change(p, e.target.value)}>
-              ${Object.entries(ROLES).map(([k, label]) => html`<option value=${k}>${label}</option>`)}
-            </select>
+            <div class="actions" style="justify-content:flex-end">
+              <select style="width:auto;max-width:100%" value=${p.role} disabled=${p.id === me.id}
+                onChange=${(e) => change(p, e.target.value)}>
+                ${Object.entries(ROLES).map(([k, label]) => html`<option value=${k}>${label}</option>`)}
+              </select>
+              ${p.id !== me.id && html`<button class="btn small" onClick=${() => remove(p)}>Remove</button>`}
+            </div>
           </div>
         `,
       )}
