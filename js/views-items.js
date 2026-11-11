@@ -2,7 +2,7 @@
 import { html, useState, useMemo } from './lib.js';
 import { db } from './data.js';
 import {
-  KINDS, UNITS, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, ask, useLoad, toCSV, download, today,
+  KINDS, UNITS, LENGTH_UNITS, isLength, lengthUnit, setLengthUnit, shownUnit, fmtQty, toStored, fmtNum, fmtMoney, fmtDate, isLow, openLoans, go, toast, ask, useLoad, toCSV, download, today,
 } from './ui.js';
 
 export const ITEM_CSV = [
@@ -24,6 +24,20 @@ import { savedToast, runUndo, isUndo } from './undo.js';
 const Loading = () => html`<p class="state">Loading…</p>`;
 const Failed = ({ error }) => html`<p class="state">Something went wrong: ${error.message}</p>`;
 
+// Lets each person choose one unit for all lengths. Stored quantities are not changed.
+function LengthPicker() {
+  const [unit, setUnit] = useState(lengthUnit());
+  return html`
+    <label class="length-pick">
+      <span>Show lengths in</span>
+      <select value=${unit} onChange=${(e) => { setUnit(e.target.value); setLengthUnit(e.target.value); }}>
+        <option value="">as recorded</option>
+        ${LENGTH_UNITS.map((u) => html`<option value=${u}>${u}</option>`)}
+      </select>
+    </label>
+  `;
+}
+
 function ItemRow({ item }) {
   const sub = [KINDS[item.kind]?.label, item.category, item.location_name].filter(Boolean).join(' · ');
   return html`
@@ -33,10 +47,10 @@ function ItemRow({ item }) {
         <div class="sub">${sub}</div>
       </div>
       <div class="qty">
-        ${fmtNum(item.quantity)} <small>${item.unit}</small>
+        ${fmtQty(item.quantity, item.unit)} <small>${shownUnit(item.unit)}</small>
         ${item.kind === 'tool'
           ? html`<span class="min">available</span>`
-          : item.min_quantity > 0 && html`<span class="min">min ${fmtNum(item.min_quantity)}</span>`}
+          : item.min_quantity > 0 && html`<span class="min">min ${fmtQty(item.min_quantity, item.unit)}</span>`}
       </div>
     </a>
   `;
@@ -168,6 +182,7 @@ export function Items({ me, locationId }) {
         <button class=${'chip' + (lowOnly ? ' on' : '')} onClick=${() => setLowOnly(!lowOnly)}>Low stock only</button>
       </div>
     </div>
+    ${items.some((i) => isLength(i.unit)) && html`<${LengthPicker} />`}
     <div class="card list">
       ${shown.length
         ? shown.map((i) => html`<${ItemRow} item=${i} key=${i.id} />`)
@@ -203,7 +218,7 @@ function MovementDialog({ item, type, onLoan = 0, projects = [], onClose, onDone
     setBusy(true);
     setError('');
     try {
-      const saved = await db.recordMovement({ item_id: item.id, type, quantity: Number(quantity), reason, project_id: projectId || null });
+      const saved = await db.recordMovement({ item_id: item.id, type, quantity: toStored(quantity, item.unit), reason, project_id: projectId || null });
       savedToast('Stock updated', saved);
       onDone();
     } catch (err) {
@@ -218,14 +233,14 @@ function MovementDialog({ item, type, onLoan = 0, projects = [], onClose, onDone
         <div>
           <h2>${cfg.title}</h2>
           <p class="muted small">
-            ${item.name}: ${fmtNum(item.quantity)} ${item.unit} ${loanType ? 'available' : 'in stock'}${loanType
+            ${item.name}: ${fmtQty(item.quantity, item.unit)} ${shownUnit(item.unit)} ${loanType ? 'available' : 'in stock'}${loanType
               ? `, ${fmtNum(onLoan)} on loan`
               : ''}
           </p>
         </div>
         ${error && html`<p class="error">${error}</p>`}
         <label>
-          <span>${cfg.field} (${item.unit})</span>
+          <span>${cfg.field} (${shownUnit(item.unit)})</span>
           <input type="number" inputmode="decimal" step="any" min="0" required autofocus
             value=${quantity} onInput=${(e) => setQuantity(e.target.value)} />
         </label>
@@ -316,13 +331,14 @@ export function ItemDetail({ me, id }) {
       <div class="stock">
         <div>
           <div class="muted small">${isTool ? 'Available' : 'In stock'}</div>
-          <div class="big">${fmtNum(item.quantity)} <small>${item.unit}</small></div>
+          <div class="big">${fmtQty(item.quantity, item.unit)} <small>${shownUnit(item.unit)}</small></div>
+          ${isLength(item.unit) && html`<${LengthPicker} />`}
         </div>
         <div class="muted small">
           ${isTool
             ? `${fmtNum(onLoan)} on loan, ${fmtNum(item.quantity + onLoan)} owned`
             : html`${isLow(item) && html`<span class="badge low">Low</span>${' '}`}
-                ${item.min_quantity > 0 ? `Minimum ${fmtNum(item.min_quantity)} ${item.unit}` : 'No minimum set'}`}
+                ${item.min_quantity > 0 ? `Minimum ${fmtQty(item.min_quantity, item.unit)} ${shownUnit(item.unit)}` : 'No minimum set'}`}
         </div>
       </div>
       ${me.canEdit &&

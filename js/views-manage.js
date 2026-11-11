@@ -1,7 +1,7 @@
 // Projects, suppliers and CSV import.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { KINDS, UNITS, fmtNum, fmtMoney, moveCost, go, toast, ask, useLoad, parseCSV, toCSV, download } from './ui.js';
+import { KINDS, UNITS, fmtQty, shownUnit, fmtNum, fmtMoney, moveCost, go, toast, ask, useLoad, parseCSV, toCSV, download } from './ui.js';
 import { MovementList, exportMoves } from './views-other.js';
 import { ITEM_CSV } from './views-items.js';
 
@@ -142,7 +142,7 @@ export function ProjectDetail({ me, id }) {
                 <a class="row" href=${'#/items/' + l.id} key=${l.id}>
                   <div class="main">
                     <div class="title">${l.name}</div>
-                    <div class="sub">${fmtNum(l.quantity)} ${l.unit}</div>
+                    <div class="sub">${fmtQty(l.quantity, l.unit)} ${shownUnit(l.unit)}</div>
                   </div>
                   <div class="qty">${fmtMoney(l.cost)}</div>
                 </a>

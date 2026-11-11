@@ -1,7 +1,7 @@
 // Movement list (shared), full history page and team page.
 import { html, useState } from './lib.js';
 import { db } from './data.js';
-import { MOVE_LABELS, ROLES, fmtNum, fmtDate, toast, ask, useLoad, toCSV, download, today, appBase } from './ui.js';
+import { MOVE_LABELS, ROLES, fmtQty, shownUnit, fmtNum, fmtDate, toast, ask, useLoad, toCSV, download, today, appBase } from './ui.js';
 
 export function exportMoves(moves, name = 'stock-history') {
   const rows = moves.map((m) => [
@@ -37,9 +37,9 @@ export function MovementList({ moves, showItem = false, undoId = null, onUndo })
             </div>
             <div>
               <div class=${'delta ' + (m.delta > 0 ? 'pos' : m.delta < 0 ? 'neg' : '')}>
-                ${m.delta > 0 ? '+' : ''}${fmtNum(m.delta)} ${m.unit}
+                ${m.delta > 0 ? '+' : ''}${fmtQty(m.delta, m.unit)} ${shownUnit(m.unit)}
               </div>
-              <div class="muted small num" style="text-align:right">now ${fmtNum(m.balance_after)}</div>
+              <div class="muted small num" style="text-align:right">now ${fmtQty(m.balance_after, m.unit)}</div>
             </div>
           </div>
         `,

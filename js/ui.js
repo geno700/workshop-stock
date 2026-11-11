@@ -9,7 +9,7 @@ export const KINDS = {
   tool: { label: 'Tool', fields: [['serial', 'Serial / asset no.'], ['condition', 'Condition']] },
 };
 
-export const UNITS = ['pcs', 'm', 'mm', 'kg', 'g', 'm²', 'L', 'sheet', 'roll', 'box', 'set'];
+export const UNITS = ['pcs', 'm', 'cm', 'mm', 'in', 'ft', 'kg', 'g', 'm²', 'L', 'sheet', 'roll', 'box', 'set'];
 
 export const MOVE_LABELS = { in: 'Added', out: 'Taken', adjust: 'Recount', checkout: 'Borrowed', return: 'Returned' };
 
@@ -21,6 +21,45 @@ export const ROLES = {
 };
 
 export const fmtNum = (n) => Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
+
+// ---------- length units ----------
+// Lengths are stored in the item's own unit. Each person can choose one unit to see and enter
+// all lengths in (kept in this browser); other units such as pcs or kg are never converted.
+const LENGTH_MM = { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 };
+const LENGTH_KEY = 'workshop-stock-length-unit';
+export const LENGTH_UNITS = Object.keys(LENGTH_MM);
+export const isLength = (unit) => Object.hasOwn(LENGTH_MM, unit);
+
+export function lengthUnit() {
+  try {
+    const u = localStorage.getItem(LENGTH_KEY) ?? '';
+    return isLength(u) ? u : '';
+  } catch {
+    return '';
+  }
+}
+export function setLengthUnit(unit) {
+  try {
+    if (unit) localStorage.setItem(LENGTH_KEY, unit);
+    else localStorage.removeItem(LENGTH_KEY);
+  } catch {
+    // Storage blocked: lengths stay as recorded.
+  }
+  dispatchEvent(new Event('stock-changed'));
+}
+
+// The unit a quantity is shown and typed in, and the number converted to it.
+export const shownUnit = (unit) => (isLength(unit) && lengthUnit()) || unit;
+export function shownNum(n, unit) {
+  const to = shownUnit(unit);
+  return to === unit ? Number(n ?? 0) : (Number(n ?? 0) * LENGTH_MM[unit]) / LENGTH_MM[to];
+}
+export const fmtQty = (n, unit) => fmtNum(shownNum(n, unit));
+// A typed quantity, converted back to the item's own unit for saving.
+export function toStored(n, unit) {
+  const from = shownUnit(unit);
+  return from === unit ? Number(n) : Math.round(((Number(n) * LENGTH_MM[from]) / LENGTH_MM[unit]) * 1e4) / 1e4;
+}
 
 export const fmtMoney = (n) =>
   Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
