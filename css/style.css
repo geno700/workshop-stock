@@ -307,3 +307,5 @@ dl { margin: 0; }
 .auth.wide { max-width: 520px; margin-top: 5vh; padding-bottom: 40px; }
 .join-code { font-family: ui-monospace, Consolas, monospace; font-size: 1.15rem; font-weight: 700; letter-spacing: 0.12em; }.row.wrap { flex-wrap: wrap; }
 .row.wrap .main { flex: 1 1 200px; }
+.modal.ask p { white-space: pre-line; }
+.btn.primary.danger-fill { background: var(--danger); border-color: var(--danger); }
