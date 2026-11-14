@@ -30,6 +30,8 @@ Anyone can start a workshop, name it, and invite their team with a link or a joi
   Two voice engines: the browser's built-in one (fast, speech goes to the browser's online service) and a private one
   that runs on the device (English, downloads a speech model of about 40 MB on first use).
 
+- Installable: in Chrome or Edge choose **Install** (on a phone, **Add to Home screen**) to get the app in its own window with its own icon.
+
 Add `?demo` to the app's address to try it with sample data without touching the real stock.
 
 ## Try it on this PC

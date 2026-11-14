@@ -4,12 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#d9530e" />
     <title>Workshop Stock</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
     <div id="app"><p class="boot">Loading…</p></div>
     <div id="toasts" aria-live="polite"></div>
     <script type="module" src="js/app.js"></script>
+    <script>
+      // Makes the app installable and keeps its files fresh (see sw.js).
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    </script>
   </body>
 </html>
