@@ -6,7 +6,7 @@ export const config = {
   // Publishable key: safe to be public. Never put a secret key here.
   supabaseAnonKey: 'sb_publishable_M7QzNvmL2Tto6-QnkTr0rQ_-Y0ueJok',
   // Public address of the app. QR labels point here.
-  appUrl: 'https://geno700.github.io/workshop-stock/',
+  appUrl: 'https://algebratronics.com/workshop-stock/',
   workshopName: 'Workshop Stock',
   // Shown after money values, e.g. 'EGP', 'USD', '€'. Leave empty for plain numbers.
   currency: '',
