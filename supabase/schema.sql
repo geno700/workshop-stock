@@ -415,3 +415,10 @@ create policy "members edit projects" on public.projects for update to authentic
   with check (public.role_in(workshop_id) in ('member', 'admin'));
 create policy "admin deletes projects" on public.projects for delete to authenticated
   using (public.role_in(workshop_id) = 'admin');
+
+-- ---------------------------------------------------------------- security hardening (26 Nov 2026)
+-- Helper used by RLS policies: signed-in users only. Trigger functions are never API calls.
+revoke execute on function public.role_in(uuid) from public, anon;
+grant execute on function public.role_in(uuid) to authenticated, service_role;
+revoke execute on function public.handle_new_user(), public.guard_item_quantity() from public, anon, authenticated;
+alter function public.guard_item_quantity() set search_path = '';
