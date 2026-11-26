@@ -3,7 +3,7 @@
 //   and served from the saved copy when offline.
 // - Libraries from the CDN have fixed versions, so the saved copy is used first.
 // - Everything else (the database, sign-in, the speech model) goes straight to the network.
-const CACHE = 'workshop-stock-v1';
+const CACHE = 'workshop-stock-v2';
 const CDN = 'https://cdn.jsdelivr.net/';
 
 self.addEventListener('install', () => self.skipWaiting());
